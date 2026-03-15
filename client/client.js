@@ -1546,7 +1546,7 @@ function renderAustraliaMap() {
 
       pinsHtml += `<g class="prop-pin ${isMyProp ? 'mine' : 'enemy'}"
         data-owner="${playerIdx}" data-oid="${prop._ownedId}"
-        style="cursor:pointer;transform-origin:${pcx}px ${pcy}px;">
+        style="cursor:pointer;">
         <defs><clipPath id="${clipId}"><circle cx="${pcx}" cy="${pcy}" r="${pr - 2}"/></clipPath></defs>
         <!-- drop shadow -->
         <ellipse cx="${pcx}" cy="${tipY + 3}" rx="6" ry="2.5" fill="rgba(0,0,0,0.18)"/>

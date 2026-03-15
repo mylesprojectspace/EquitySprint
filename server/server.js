@@ -418,9 +418,9 @@ io.on('connection', (socket) => {
 
     if (!result.ok) return emitError(socket, result.reason);
 
-    // Slot-consuming actions automatically advance the turn (1 action per slot per rules)
+    // End slot only when both actions are spent (AABB — 2 actions per player per turn)
     const SLOT_CONSUMING = ['buy', 'reduceDebt', 'renovate', 'sell', 'releaseEquity', 'develop'];
-    if (SLOT_CONSUMING.includes(payload.action) && G.phase !== 'gameover') {
+    if (SLOT_CONSUMING.includes(payload.action) && G.phase !== 'gameover' && G.actionsUsedThisSlot >= 2) {
       engine.endActionSlot(G);
     }
 

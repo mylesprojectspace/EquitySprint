@@ -487,6 +487,8 @@ select:focus { border-color: var(--blue); }
 
 .prop-pin {
   cursor: pointer;
+  transform-box: fill-box;
+  transform-origin: center center;
   transition: transform .2s cubic-bezier(.34,1.56,.64,1);
 }
 .prop-pin:hover { transform: scale(1.25); }
