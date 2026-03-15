@@ -144,7 +144,7 @@ function runBotTurn(roomId) {
     case 'action': {
       const player = G.players[botIdx];
       let acted = false;
-      if (!player.blocked) {
+      if (!player.blocked && G.actionsUsedThisSlot < 2) {
         const allMarket = [...G.market.metro, ...G.market.regional];
         const affordable = allMarket.filter(p => {
           const dep = p.price * (G.activeRestrictions.depositRate || 0.20);
@@ -156,7 +156,8 @@ function runBotTurn(roomId) {
           if (result.ok) { broadcastActionResult(roomId, result); acted = true; }
         }
       }
-      if (!acted) engine.endActionSlot(G);
+      // Bot ends turn after acting or when out of actions
+      if (!acted || G.actionsUsedThisSlot >= 2) engine.endActionSlot(G);
       broadcastState(roomId);
       broadcastAllPrivateStates(roomId);
       break;

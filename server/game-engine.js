@@ -128,6 +128,7 @@ function initGame(names, botSlots = [], avatarIdxs = []) {
     yearSlot:          0,
     firstThisYear:     startingPlayer,
     phase:             'wheelSpin',     // game starts with a wheel spin before year 1
+    actionsUsedThisSlot: 0,            // counts paid actions used in current turn (max 2)
     players:           names.map((name, id) => {
       const p = createPlayer(name, id, avatarIdxs[id] || (id + 1));
       p.isBot = !!(botSlots[id]);
@@ -581,11 +582,13 @@ function actionBuy(G, playerIdx, lid) {
     prop = [...G.market.metro, ...G.market.regional].find(p => p._lid === lid);
   }
   if (!prop) return { ok: false, reason: 'Property no longer available.' };
+  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
 
   const check = canBuyProperty(G, player, prop);
   if (!check.ok) return check;
 
   executeBuy(G, player, prop, check);
+  G.actionsUsedThisSlot++;
 
   // Remove listing from market
   G.market.metro    = G.market.metro.filter(p => p._lid !== lid);
@@ -637,9 +640,11 @@ function actionReduceDebt(G, playerIdx, oid, amount) {
   if (!prop) return { ok: false, reason: 'Property not found.' };
   if (player.cash < amount) return { ok: false, reason: `Not enough cash — have $${fmt(player.cash)}` };
   if (amount > prop.debt) amount = prop.debt;
+  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
 
   player.cash -= amount;
   prop.debt   -= amount;
+  G.actionsUsedThisSlot++;
   recalcPlayer(G, player);
 
   addLog(G, `${player.name} paid $${fmt(amount)} off ${prop.city} debt. Remaining: $${fmt(prop.debt)}`);
@@ -663,6 +668,7 @@ function actionRenovate(G, playerIdx, oid) {
   if (prop.renovated)   return { ok: false, reason: `${prop.city} has already been renovated.` };
   if (prop._renovating) return { ok: false, reason: `${prop.city} renovation already in progress.` };
   if (prop._developing) return { ok: false, reason: `${prop.city} is currently being developed. Wait for it to complete first.` };
+  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
 
   let cost = player.freeRenoNextRound ? 0 : Math.round(prop.currentValue * RENO_COST_MULT);
   if (player.renoDiscountNextRound) cost = Math.round(cost * 0.5);
@@ -674,9 +680,10 @@ function actionRenovate(G, playerIdx, oid) {
   player.freeRenoNextRound     = false;
   // Duration: 1 year (low risk) or 2 years (medium/high risk, 50% chance)
   const renoDuration = (prop.risk === 'low' || Math.random() < 0.5) ? 1 : 2;
-  prop._renovating      = true;
-  prop._renoYear        = G.year;
+  prop._renovating       = true;
+  prop._renoYear         = G.year;
   prop._renoCompleteYear = G.year + renoDuration;
+  G.actionsUsedThisSlot++;
 
   recalcPlayer(G, player);
   addLog(G, `${player.name} started renovation on ${prop.city}. Cost $${fmt(cost)}. Est. ${renoDuration} year(s).`);
@@ -727,6 +734,8 @@ function actionSell(G, playerIdx, oid) {
   const player = G.players[playerIdx];
   if (playerIdx !== G.currentPlayerIdx) return { ok: false, reason: 'Not your turn.' };
 
+  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
+
   const propIdx = player.properties.findIndex(p => p._ownedId === oid);
   if (propIdx === -1) return { ok: false, reason: 'Property not found.' };
 
@@ -735,6 +744,7 @@ function actionSell(G, playerIdx, oid) {
   const equity   = prop.currentValue - prop.debt - agentFee;
 
   player.cash += equity;
+  G.actionsUsedThisSlot++;
   player.properties.splice(propIdx, 1);
   recalcPlayer(G, player);
 
@@ -769,9 +779,11 @@ function actionReleaseEquity(G, playerIdx, oid, amount) {
   const svc = projectedServiceability(G, player, amount);
   if (svc < 0)
     return { ok: false, reason: `Serviceability fails — projected $${fmt(svc)} after increase.` };
+  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
 
   prop.debt   += amount;
   player.cash += amount;
+  G.actionsUsedThisSlot++;
   recalcPlayer(G, player);
 
   addLog(G, `${player.name} released $${fmt(amount)} equity from ${prop.city}. New debt: $${fmt(prop.debt)}.`);
@@ -797,6 +809,7 @@ function actionDevelop(G, playerIdx, oid) {
   if (prop._developing) return { ok: false, reason: `${prop.city} development already in progress.` };
   if (prop._renovating) return { ok: false, reason: `${prop.city} is currently being renovated. Finish the renovation first.` };
   if (prop.market !== 'regional') return { ok: false, reason: 'Development only on regional properties.' };
+  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
 
   const baseCost = Math.round(prop.currentValue * DEVELOP_COST_MULT);
   if (player.cash < baseCost)
@@ -812,6 +825,7 @@ function actionDevelop(G, playerIdx, oid) {
   prop._developing       = true;
   prop._devYear          = G.year;
   prop._devCompleteYear  = G.year + devDuration;
+  G.actionsUsedThisSlot++;
 
   recalcPlayer(G, player);
   addLog(G, `${player.name} started development on ${prop.city}. Cost $${fmt(baseCost)}. Completes Year ${G.year + devDuration}.`);
@@ -877,11 +891,11 @@ function actionSetManager(G, playerIdx, oid, tier) {
 // Slot System
 // ============================================================
 
-function totalSlots(G)         { return G.players.length * 2; }
-function slotPlayer(G, slot)   { return (G.firstThisYear + (slot % G.players.length)) % G.players.length; }
-function slotActionNumber(G, slot) { return Math.floor(slot / G.players.length) + 1; }
+function totalSlots(G)         { return G.players.length; }  // 1 turn per player per year
+function slotPlayer(G, slot)   { return (G.firstThisYear + slot) % G.players.length; }
 
 function endActionSlot(G) {
+  G.actionsUsedThisSlot = 0;
   G.yearSlot++;
   if (G.yearSlot >= totalSlots(G)) {
     processYearEnd(G);

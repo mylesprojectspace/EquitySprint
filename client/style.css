@@ -815,7 +815,11 @@ select:focus { border-color: var(--blue); }
 
 .recap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 .recap-card { background: var(--cream); border: 2px solid var(--border); border-radius: 10px; padding: 10px; }
-.recap-name { font-size: .78rem; font-weight: 800; margin-bottom: 5px; }
+.recap-name { font-size: .78rem; font-weight: 800; margin-bottom: 6px; }
+.recap-net-change {
+  font-size: .72rem; font-weight: 800; border-radius: 6px; padding: 4px 8px; margin-bottom: 6px;
+  text-align: center; letter-spacing: .02em;
+}
 .recap-stat { display: flex; justify-content: space-between; font-size: .74rem; color: var(--text2); font-weight: 600; padding: 2px 0; }
 .recap-stat strong { color: var(--text); }
 
@@ -1762,4 +1766,46 @@ select:focus { border-color: var(--blue); }
   55%  { transform: translate(-50%, -110%) scale(1);    opacity: 1; }
   80%  { transform: translate(-50%, -110%) scale(1);    opacity: 1; }
   100% { transform: translate(-50%, -124%) scale(0.85); opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════
+   SELL CONFIRM MODAL BREAKDOWN
+═══════════════════════════════════════════════ */
+.sell-breakdown       { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; }
+.sb-row               { display: flex; justify-content: space-between; align-items: center; font-size: .82rem; font-weight: 600; padding: 4px 0; color: var(--text2); }
+.sb-row strong        { font-weight: 800; color: var(--text); }
+.sb-row.neg strong    { color: var(--red); }
+.sb-row.pos strong    { color: var(--green); }
+.sb-row.total         { border-top: 2px solid var(--border); margin-top: 4px; padding-top: 8px; font-size: .9rem; font-weight: 900; color: var(--text); }
+.sb-row.total strong  { font-size: 1rem; }
+.sb-row.total.neg strong { color: var(--red); }
+.sb-row.total.pos strong { color: var(--mint); }
+.sb-row.small         { font-size: .72rem; opacity: .7; padding: 1px 0; }
+.sb-divider           { border: none; border-top: 1px dashed var(--border); margin: 4px 0; }
+
+/* ═══════════════════════════════════════════════
+   PROPERTY CARD TOP TAGS
+═══════════════════════════════════════════════ */
+.prop-top-tags        { position: absolute; top: 6px; left: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 3; }
+.prop-top-tag         { font-size: .6rem; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 5px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+.tag-rare             { background: var(--purple); color: #fff; }
+.tag-uncommon         { background: var(--blue); color: #fff; }
+.tag-deal             { background: var(--coral); color: #fff; }
+
+/* ═══════════════════════════════════════════════
+   ACTION COUNTER DOTS (bottom strip)
+═══════════════════════════════════════════════ */
+.action-dots          { display: flex; gap: 5px; align-items: center; }
+.action-dot           { width: 10px; height: 10px; border-radius: 50%; background: var(--mint); border: 2px solid rgba(0,0,0,.1); transition: background .2s, transform .15s; }
+.action-dot.used      { background: var(--border); }
+.action-counter       { font-size: .72rem; font-weight: 800; color: var(--text2); margin-left: 4px; }
+.action-used-msg      { font-size: .72rem; font-weight: 800; color: var(--red); background: var(--red-light); border-radius: 6px; padding: 3px 8px; }
+
+/* End turn pulse when no actions remain */
+.pulse-end {
+  animation: pulseEnd 1.4s ease-in-out infinite;
+}
+@keyframes pulseEnd {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74,144,226,.5); }
+  50%       { box-shadow: 0 0 0 6px rgba(74,144,226,0); }
 }

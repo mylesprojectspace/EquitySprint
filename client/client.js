@@ -331,14 +331,30 @@ function initSocket() {
   });
 
   socket.on('reno-complete', (results) => {
-    pendingRenoResults = results;
-    renderRenoComplete(results);
-    showOverlay('overlay-reno');
+    // Only show full overlay to the active player; others get a toast
+    if (G && G.currentPlayerIdx === myPlayerIdx) {
+      pendingRenoResults = results;
+      renderRenoComplete(results);
+      showOverlay('overlay-reno');
+    } else {
+      results.forEach(r => {
+        const owner = G?.players[G?.currentPlayerIdx];
+        showToast('🔨', `Renovation Complete`, [`${owner ? owner.name + ' — ' : ''}${escHtml(r.prop)}: +${fmt(r.rentBoost)}/yr rent`]);
+      });
+    }
   });
 
   socket.on('dev-complete', (results) => {
-    renderDevComplete(results);
-    showOverlay('overlay-dev');
+    if (G && G.currentPlayerIdx === myPlayerIdx) {
+      renderDevComplete(results);
+      showOverlay('overlay-dev');
+    } else {
+      results.forEach(r => {
+        const owner = G?.players[G?.currentPlayerIdx];
+        const msg = r.success ? `${owner ? owner.name + ' — ' : ''}${escHtml(r.prop)}: development succeeded!` : `${owner ? owner.name + ' — ' : ''}${escHtml(r.prop)}: development failed`;
+        showToast('🏗', `Development Complete`, [msg]);
+      });
+    }
   });
 
   socket.on('player-emote', ({ playerIdx, emoteId }) => {
@@ -508,10 +524,9 @@ function renderHeader() {
   const turnBadge = document.getElementById('hdr-turn-badge');
   if (turnBadge) {
     if (G.phase === 'action') {
-      const playerCount = G.players.length;
-      const actionNum   = Math.floor(G.yearSlot / Math.max(playerCount, 1)) + 1;
       const activePlayer = G.players[G.currentPlayerIdx];
-      turnBadge.textContent = `Slot ${actionNum}/2 · ${activePlayer ? activePlayer.name : '?'}`;
+      const used = G.actionsUsedThisSlot || 0;
+      turnBadge.textContent = `${activePlayer ? activePlayer.name : '?'} · ${used}/2 actions`;
       turnBadge.classList.remove('hidden');
     } else {
       turnBadge.classList.add('hidden');
@@ -527,15 +542,14 @@ function renderTurnBanner() {
   if (G.phase === 'action') {
     const isMyTurn = G.currentPlayerIdx === myPlayerIdx;
     const activePlayer = G.players[G.currentPlayerIdx];
-    const playerCount = G.players.length;
-    const slotNum = (G.yearSlot % (playerCount * 2) < playerCount)
-      ? Math.floor(G.yearSlot / playerCount) + 1
-      : 2;
-    const actionNum = Math.min(slotNum, 2);
+    const used = G.actionsUsedThisSlot || 0;
+    const left = Math.max(0, 2 - used);
 
     if (isMyTurn) {
-      banner.className = 'my-turn';
-      banner.innerHTML = `<span class="tb-dot" style="background:#52C9A0"></span> YOUR TURN — Action ${actionNum} of 2`;
+      banner.className = left === 0 ? 'my-turn turn-done' : 'my-turn';
+      banner.innerHTML = left === 0
+        ? `<span class="tb-dot" style="background:#52C9A0"></span> YOUR TURN — No actions left · End turn when ready`
+        : `<span class="tb-dot" style="background:#52C9A0"></span> YOUR TURN — ${left} action${left !== 1 ? 's' : ''} remaining`;
     } else {
       banner.className = 'their-turn';
       banner.innerHTML = `<span class="tb-dot" style="background:var(--text2)"></span> Waiting for <strong>${escHtml(activePlayer?.name || '?')}</strong>`;
@@ -1117,6 +1131,14 @@ function propCardHtml(prop, stars) {
     }
   }
 
+  // Top tags (rarity + discount) displayed prominently on image
+  const topTags = [
+    prop.rarity && prop.rarity !== 'standard'
+      ? `<span class="prop-top-tag tag-rare">${prop.rarity.charAt(0).toUpperCase() + prop.rarity.slice(1)}</span>` : '',
+    prop.isDeal
+      ? `<span class="prop-top-tag tag-deal">−${prop.dealDiscountPct}% OFF</span>` : '',
+  ].filter(Boolean).join('');
+
   return `<div class="prop-card ${rarityClass} ${riskClass} ${unaffordableClass}${frozenOverlay ? ' prop-card-frozen' : ''}" style="position:relative;">
     ${frozenOverlay}
     <div class="prop-img-wrap">
@@ -1124,6 +1146,7 @@ function propCardHtml(prop, stars) {
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
            alt="${escHtml(prop.propType)}">
       <div class="prop-img-fallback" style="display:none;background:var(--blue-light);">${vis.emoji}</div>
+      ${topTags ? `<div class="prop-top-tags">${topTags}</div>` : ''}
       <button class="prop-info-btn" data-prop-info="${propJson}" title="Property Details">ℹ</button>
     </div>
     <div class="prop-card-body">
@@ -1737,11 +1760,16 @@ function showPropInfoModal(prop) {
   }
 
   // Owned stats row
+  const ownedNPI = prop.isOwned
+    ? (prop.currentRent || 0) - Math.round((prop.debt || 0) * (G?.players[myPlayerIdx]?.interestRate || 0.065))
+    : null;
   const ownedStatsHtml = prop.isOwned ? `<div class="pi-grid pi-owned-stats">
     <div class="pi-stat"><div class="pi-stat-label">Current Value</div><div class="pi-stat-value" style="color:var(--blue);">${fmt(prop.currentValue)}</div></div>
     <div class="pi-stat"><div class="pi-stat-label">Debt</div><div class="pi-stat-value" style="color:var(--red);">${fmt(prop.debt)}</div></div>
     <div class="pi-stat"><div class="pi-stat-label">Equity</div><div class="pi-stat-value" style="color:var(--mint);">${fmt(prop.currentValue - prop.debt)}</div></div>
     <div class="pi-stat"><div class="pi-stat-label">Rent/yr</div><div class="pi-stat-value">${fmt(prop.currentRent)}</div></div>
+    <div class="pi-stat"><div class="pi-stat-label">Net Passive</div><div class="pi-stat-value" style="color:${ownedNPI >= 0 ? 'var(--mint)' : 'var(--red)'};">${sign(Math.round(ownedNPI))}/yr</div></div>
+    <div class="pi-stat"><div class="pi-stat-label">Repayments</div><div class="pi-stat-value" style="color:var(--red);">−${fmt(Math.round((prop.debt || 0) * (G?.players[myPlayerIdx]?.interestRate || 0.065)))}/yr</div></div>
   </div>` : '';
 
   el.innerHTML = `
@@ -1892,7 +1920,7 @@ function renderBottomStrip() {
     rightHtml += `<div class="player-card${isMe ? ' me' : ''}${isCurrent ? ' current-turn' : ''}"
       data-player-idx="${idx}" style="border-left-color:${color};">
       <div class="pc-name">
-        <div class="player-avatar" style="border-color:${color};background:url('/assets/avatars/${(idx%5)+1}.png') center/cover no-repeat;"></div>
+        <div class="player-avatar" style="border-color:${color};background:url('/assets/avatars/${player.avatarIdx || (idx+1)}.png') center/cover no-repeat;"></div>
         ${escHtml(player.name)}
         ${isMe ? '<span class="pc-you-tag">YOU</span>' : ''}
         ${player.isBot ? '<span class="pc-you-tag" style="background:var(--text3);">BOT</span>' : ''}
@@ -1910,10 +1938,17 @@ function renderBottomStrip() {
   const isActionPhase = G.phase === 'action' && G.currentPlayerIdx === myPlayerIdx;
   let actionPanelHtml = '';
   if (isActionPhase) {
-    const playerCount = Math.max(G.players.length, 1);
-    const actionNum   = Math.floor(G.yearSlot / playerCount) + 1;
-    const btnLabel = slotActionTaken ? `End Slot ${actionNum}/2 ✓` : `Skip Slot ${actionNum}/2 →`;
-    actionPanelHtml = `<button id="btn-end-slot-bottom" class="btn-primary">${btnLabel}</button>`;
+    const used = G.actionsUsedThisSlot || 0;
+    const left = Math.max(0, 2 - used);
+    const dotsHtml = [0,1].map(i =>
+      `<span class="action-dot${i < used ? ' used' : ' free'}"></span>`
+    ).join('');
+    const statusMsg = left === 0
+      ? `<div class="action-used-msg">No actions left — end your turn when ready</div>`
+      : `<div class="action-counter">${dotsHtml} <span>${left} action${left !== 1 ? 's' : ''} remaining</span></div>`;
+    actionPanelHtml = `
+      ${statusMsg}
+      <button id="btn-end-slot-bottom" class="btn-primary${left === 0 ? ' pulse-end' : ''}">${left === 0 ? 'End Turn ✓' : 'End Turn →'}</button>`;
   } else if (G.phase === 'action') {
     const cur = G.players[G.currentPlayerIdx];
     actionPanelHtml = `<div class="waiting-turn-msg">Waiting for<br><strong>${escHtml(cur?.name || '')}</strong></div>`;
@@ -2057,11 +2092,12 @@ function ownedCardHtml(prop, player, isMyTurn) {
 // ── Handle property actions ────────────────────────────────
 function handleOwnedAction(action, oid, btn) {
   switch (action) {
-    case 'sell':
-      if (confirm('Sell this property?')) {
-        socket.emit('player-action', { action: 'sell', oid });
-      }
+    case 'sell': {
+      const _p  = G.players[myPlayerIdx];
+      const _pr = _p.properties.find(pr => pr._ownedId === oid);
+      if (_pr) openSellConfirmModal(_pr, oid);
       break;
+    }
     case 'renovate': {
       const _p  = G.players[myPlayerIdx];
       const _pr = _p.properties.find(pr => pr._ownedId === oid);
@@ -2203,6 +2239,39 @@ function openRenoConfirmModal(prop, p, oid) {
   document.getElementById('reno-confirm-desc').textContent =
     'Renovation locks the property for 1–2 years but significantly boosts rent and value on completion.';
   document.getElementById('modal-reno-confirm').classList.remove('hidden');
+}
+
+let sellPendingOid = null;
+
+function openSellConfirmModal(prop, oid) {
+  sellPendingOid = oid;
+  const agentFee    = Math.round(prop.currentValue * 0.025);
+  const netProceeds = prop.currentValue - prop.debt - agentFee;
+  const capitalGain = prop.currentValue - prop.purchasePrice;
+  const isProfit    = netProceeds >= 0;
+  const gainColor   = capitalGain >= 0 ? 'var(--mint)' : 'var(--red)';
+  const proceedsColor = isProfit ? 'var(--mint)' : 'var(--red)';
+
+  document.getElementById('sell-confirm-title').textContent = 'Sell Property';
+  document.getElementById('sell-confirm-city').textContent  = prop.city + ' · ' + (prop.propType || '');
+
+  document.getElementById('sell-confirm-breakdown').innerHTML = `
+    <div class="sell-breakdown">
+      <div class="sb-row"><span>Sale price</span><span>${fmt(prop.currentValue)}</span></div>
+      <div class="sb-row neg"><span>Agent fee (2.5%)</span><span>−${fmt(agentFee)}</span></div>
+      <div class="sb-row neg"><span>Debt outstanding</span><span>−${fmt(prop.debt)}</span></div>
+      <div class="sb-row total" style="color:${proceedsColor};">
+        <span>You receive</span><span style="font-size:1.2rem;">${netProceeds < 0 ? '−' : '+'}${fmt(Math.abs(netProceeds))}</span>
+      </div>
+      <div class="sb-divider"></div>
+      <div class="sb-row small"><span>Bought for</span><span>${fmt(prop.purchasePrice)}</span></div>
+      <div class="sb-row small" style="color:${gainColor};font-weight:800;">
+        <span>Capital gain</span>
+        <span>${capitalGain >= 0 ? '+' : '−'}${fmt(Math.abs(capitalGain))}</span>
+      </div>
+    </div>
+  `;
+  document.getElementById('modal-sell-confirm').classList.remove('hidden');
 }
 
 let devPendingOid = null;
@@ -2412,14 +2481,20 @@ function renderYearStartOverlay() {
     }
     // QoL item 3: add portfolio growth line
     const portGrowth = recap.portfolioGrowthValue != null ? recap.portfolioGrowthValue : null;
+    const netCashChange = recap.netSavings + recap.rentCollected - recap.interestPaid - (recap.managerCosts || 0);
+    const cashColor = netCashChange >= 0 ? 'var(--mint)' : 'var(--red)';
+    const cashBg    = netCashChange >= 0 ? 'var(--mint-light)' : 'var(--red-light)';
     return `<div class="recap-card">
       <div class="recap-name">${escHtml(p.name)}</div>
+      <div class="recap-net-change" style="background:${cashBg};color:${cashColor};">
+        ${netCashChange >= 0 ? '▲' : '▼'} ${sign(Math.round(netCashChange))} cash this year
+      </div>
       <div class="recap-stat"><span>Salary savings</span><strong class="positive">${sign(recap.netSavings)}</strong></div>
-      <div class="recap-stat"><span>Rent collected</span><strong class="positive">${sign(recap.rentCollected)}</strong></div>
-      <div class="recap-stat"><span>Interest paid</span><strong class="negative">-${fmt(recap.interestPaid)}</strong></div>
+      <div class="recap-stat"><span>Rent collected</span><strong class="${recap.rentCollected > 0 ? 'positive' : ''}">${sign(recap.rentCollected)}</strong></div>
+      <div class="recap-stat"><span>Interest paid</span><strong class="negative">−${fmt(recap.interestPaid)}</strong></div>
       ${portGrowth != null && p.properties && p.properties.length > 0 ? `<div class="recap-stat"><span>Portfolio growth</span><strong class="${portGrowth >= 0 ? 'positive' : 'negative'}">${sign(Math.round(portGrowth))}</strong></div>` : ''}
-      ${recap.managerCosts  ? `<div class="recap-stat"><span>Manager fees</span><strong class="negative">-${fmt(recap.managerCosts)}</strong></div>` : ''}
-      ${recap.totalMissedRent ? `<div class="recap-stat"><span>Missed rent</span><strong class="negative">-${fmt(recap.totalMissedRent)}</strong></div>` : ''}
+      ${recap.managerCosts  ? `<div class="recap-stat"><span>Manager fees</span><strong class="negative">−${fmt(recap.managerCosts)}</strong></div>` : ''}
+      ${recap.totalMissedRent ? `<div class="recap-stat"><span>Missed rent</span><strong class="negative">−${fmt(recap.totalMissedRent)}</strong></div>` : ''}
       <div class="recap-stat" style="border-top:1px solid var(--border);padding-top:5px;margin-top:3px;">
         <span>Net Worth</span><strong class="text-gold">${fmt(p.netWorth)}</strong>
       </div>
@@ -2669,6 +2744,18 @@ function initGameButtons() {
       renoPendingOid = null;
     }
     document.getElementById('modal-reno-confirm').classList.add('hidden');
+  });
+
+  document.getElementById('btn-cancel-sell-confirm').addEventListener('click', () => {
+    document.getElementById('modal-sell-confirm').classList.add('hidden');
+    sellPendingOid = null;
+  });
+  document.getElementById('btn-confirm-sell').addEventListener('click', () => {
+    if (sellPendingOid != null) {
+      socket.emit('player-action', { action: 'sell', oid: sellPendingOid });
+      sellPendingOid = null;
+    }
+    document.getElementById('modal-sell-confirm').classList.add('hidden');
   });
 
   document.getElementById('btn-cancel-dev-confirm').addEventListener('click', () => {
