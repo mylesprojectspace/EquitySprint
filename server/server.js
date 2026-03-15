@@ -348,6 +348,21 @@ io.on('connection', (socket) => {
     const result = engine.playInfluenceCard(room.G, playerIdx, handId, targetPlayerIdx, targetOwnedId);
     if (!result.ok) return emitError(socket, result.reason);
 
+    // Notify targeted player(s) with a dedicated alert
+    if (result.targetPlayerIdx !== null && result.targetPlayerIdx !== undefined) {
+      const targetSocketId = room.playerSlots[result.targetPlayerIdx];
+      if (targetSocketId) {
+        const targetSocket = io.sockets.sockets.get(targetSocketId);
+        if (targetSocket) {
+          targetSocket.emit('influence-alert', {
+            byName: room.G.players[playerIdx].name,
+            byPlayerIdx: playerIdx,
+            card: result.card,
+          });
+        }
+      }
+    }
+
     broadcastState(roomId);
     broadcastAllPrivateStates(roomId);
   });
@@ -391,7 +406,7 @@ io.on('connection', (socket) => {
         result = engine.actionDevelop(G, playerIdx, payload.oid);
         break;
       case 'setManager':
-        result = engine.actionSetManager(G, playerIdx, payload.oid, payload.tier);
+        result = engine.actionSetManager(G, playerIdx, payload.oid, payload.fee);
         break;
       case 'endSlot':
         engine.endActionSlot(G);

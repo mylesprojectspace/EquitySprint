@@ -357,6 +357,10 @@ function initSocket() {
     }
   });
 
+  socket.on('influence-alert', ({ byName, card }) => {
+    showInfluenceAlertOverlay(byName, card);
+  });
+
   socket.on('player-emote', ({ playerIdx, emoteId }) => {
     showEmoteBubble(playerIdx, emoteId);
   });
@@ -1161,7 +1165,7 @@ function propCardHtml(prop, stars) {
       <div class="prop-stars">
         <div class="star-row"><span class="star-label">Yield</span><span class="star-val">${renderStars(s.yield)}</span></div>
         <div class="star-row"><span class="star-label">Growth</span><span class="star-val">${renderStars(s.growth)}</span></div>
-        <div class="star-row"><span class="star-label">Vacancy</span><span class="star-val">${renderStars(s.vacancy)}</span></div>
+        <div class="star-row"><span class="star-label">Vacancy</span><span class="vacancy-pct-badge ${prop.vacancy <= 0.05 ? 'vac-low' : prop.vacancy <= 0.15 ? 'vac-med' : 'vac-high'}">${Math.round(prop.vacancy * 100)}%</span></div>
       </div>
       <div class="prop-price">${fmt(displayPrice)}</div>
       ${canBuy ? (() => {
@@ -1311,8 +1315,8 @@ function ownedModalCardHtml(prop, p) {
       ? `<span class="badge badge-develop">Dev Ready</span>` : '',
     prop.vacantThisRound
       ? `<span class="badge" style="background:rgba(208,2,27,.85);color:#fff;">Vacant</span>` : '',
-    prop.managerTier > 0
-      ? `<span class="badge" style="background:rgba(74,144,226,.85);color:#fff;">Mgr ${prop.managerTier}</span>` : '',
+    prop.managerFee > 0
+      ? `<span class="badge" style="background:rgba(74,144,226,.85);color:#fff;">Mgr $${fmt(prop.managerFee)}/yr</span>` : '',
   ].filter(Boolean).join('');
 
   // Progress bar
@@ -1403,6 +1407,18 @@ function ownedModalCardHtml(prop, p) {
       </div>
       ${progressHtml}
       ${actions ? `<div class="omc-actions">${actions}</div>` : ''}
+      <div class="mgr-panel" data-oid="${prop._ownedId}">
+        <div class="mgr-panel-header">
+          <span class="mgr-panel-label">Property Manager</span>
+          <span class="mgr-fee-live">$${fmt(prop.managerFee || 0)}/yr</span>
+        </div>
+        <input type="range" class="mgr-slider" min="0" max="10000" step="500" value="${prop.managerFee || 0}" data-oid="${prop._ownedId}" data-base-vacancy="${prop.vacancy}">
+        <div class="mgr-vacancy-preview">
+          Vacancy: <span class="mgr-vac-before">${Math.round(prop.vacancy * 100)}%</span>
+          → <span class="mgr-vac-after">${Math.round(Math.max(0, prop.vacancy - ((prop.managerFee || 0) / 10000) * 0.10) * 100)}%</span>
+        </div>
+        ${isMyTurn ? `<button class="btn-secondary mgr-apply-btn" data-oid="${prop._ownedId}">Apply Fee</button>` : '<div class="mgr-panel-hint">Available on your turn</div>'}
+      </div>
     </div>
   </div>`;
 }
@@ -1452,6 +1468,36 @@ function openPortfolioModal() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       showPropInfoModal(JSON.parse(btn.dataset.propInfo));
+    });
+  });
+
+  // Wire manager sliders — live preview
+  el.querySelectorAll('.mgr-slider').forEach(slider => {
+    const panel       = slider.closest('.mgr-panel');
+    const feeDisplay  = panel.querySelector('.mgr-fee-live');
+    const vacAfter    = panel.querySelector('.mgr-vac-after');
+    const baseVacancy = parseFloat(slider.dataset.baseVacancy) || 0;
+    slider.addEventListener('input', () => {
+      const fee = parseInt(slider.value) || 0;
+      const reduction = (fee / 10000) * 0.10;
+      const adjusted = Math.max(0, baseVacancy - reduction);
+      feeDisplay.textContent = fee === 0 ? '$0/yr (none)' : `$${fee.toLocaleString('en-AU')}/yr`;
+      vacAfter.textContent = Math.round(adjusted * 100) + '%';
+    });
+  });
+
+  // Wire apply buttons
+  el.querySelectorAll('.mgr-apply-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const oid    = parseInt(btn.dataset.oid);
+      const panel  = btn.closest('.mgr-panel');
+      const slider = panel.querySelector('.mgr-slider');
+      const fee    = parseInt(slider.value) || 0;
+      socket.emit('player-action', { action: 'setManager', oid, fee });
+      btn.textContent = 'Applied ✓';
+      btn.disabled = true;
+      setTimeout(() => openPortfolioModal(), 400);
     });
   });
 
@@ -2457,10 +2503,22 @@ function renderWheelResult(category, card, spinnerIdx) {
 
 // ── Year Start Overlay ─────────────────────────────────────
 function renderYearStartOverlay() {
-  document.getElementById('ys-title').textContent = `Year ${G.year} — Summary`;
+  const isFinalYear = G.year >= 10;
+  document.getElementById('ys-title').textContent = isFinalYear ? `⚡ Year ${G.year} — FINAL TURN!` : `Year ${G.year} — Summary`;
   const yrsLeft = 10 - G.year + 1;
   document.getElementById('ys-subtitle').textContent =
+    isFinalYear ? 'Last chance to act — highest net worth wins!' :
     yrsLeft > 0 ? `${yrsLeft} year${yrsLeft !== 1 ? 's' : ''} remaining` : '';
+
+  const finalBanner = document.getElementById('ys-final-year-banner');
+  if (finalBanner) {
+    if (isFinalYear) {
+      finalBanner.textContent = '🏁 This is the final year of the game — make your last moves count!';
+      finalBanner.classList.remove('hidden');
+    } else {
+      finalBanner.classList.add('hidden');
+    }
+  }
 
   const mcEl = document.getElementById('ys-market-change');
   if (G.activeMarketChange && G.activeMarketChange.effect !== 'normalise') {
@@ -2641,6 +2699,14 @@ function renderDevComplete(results) {
   }).join('');
 }
 
+// ── Influence Alert Overlay ────────────────────────────────
+function showInfluenceAlertOverlay(byName, card) {
+  document.getElementById('infl-alert-attacker').textContent = `${byName} played an influence card against you!`;
+  document.getElementById('infl-alert-title').textContent = card.title || 'Market Influence';
+  document.getElementById('infl-alert-desc').textContent = card.text || '';
+  showOverlay('overlay-influence-alert');
+}
+
 // ── Star Ratings ───────────────────────────────────────────
 function computeStarRatings(cards) {
   if (!cards.length) return {};
@@ -2725,6 +2791,11 @@ function initGameButtons() {
   document.getElementById('btn-dismiss-dev').addEventListener('click', () => {
     hideOverlay('overlay-dev');
     renderPhaseOverlays();
+  });
+
+  // Influence alert overlay dismiss
+  document.getElementById('btn-dismiss-infl-alert').addEventListener('click', () => {
+    hideOverlay('overlay-influence-alert');
   });
 
   // Influence modal cancel

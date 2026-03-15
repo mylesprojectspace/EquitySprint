@@ -1809,3 +1809,59 @@ select:focus { border-color: var(--blue); }
   0%, 100% { box-shadow: 0 0 0 0 rgba(74,144,226,.5); }
   50%       { box-shadow: 0 0 0 6px rgba(74,144,226,0); }
 }
+
+/* ═══════════════════════════════════════════════
+   INFLUENCE ALERT OVERLAY
+═══════════════════════════════════════════════ */
+.infl-alert-card      { max-width: 400px; text-align: center; border: 3px solid var(--red); animation: shakeIn .35s ease; }
+.infl-alert-icon      { font-size: 2.8rem; margin-bottom: 6px; }
+.infl-alert-attacker  { font-size: .78rem; font-weight: 800; color: var(--red); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+.infl-alert-title     { font-size: 1.3rem; font-weight: 900; color: var(--text); margin-bottom: 8px; }
+.infl-alert-desc      { font-size: .85rem; font-weight: 600; color: var(--text2); line-height: 1.4; background: var(--red-light); border-radius: 8px; padding: 8px 12px; }
+@keyframes shakeIn {
+  0%  { transform: scale(.8) rotate(-2deg); opacity: 0; }
+  60% { transform: scale(1.04) rotate(1deg); opacity: 1; }
+  100%{ transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════
+   PROPERTY MANAGER SLIDER PANEL
+═══════════════════════════════════════════════ */
+.mgr-panel            { margin-top: 10px; background: var(--blue-light); border: 1.5px solid var(--blue); border-radius: var(--radius-sm); padding: 8px 10px; }
+.mgr-panel-header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.mgr-panel-label      { font-size: .72rem; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; color: var(--blue); }
+.mgr-fee-live         { font-size: .78rem; font-weight: 800; color: var(--text); }
+.mgr-slider           { width: 100%; accent-color: var(--blue); cursor: pointer; margin-bottom: 4px; }
+.mgr-vacancy-preview  { font-size: .72rem; font-weight: 700; color: var(--text2); margin-bottom: 6px; }
+.mgr-vac-before       { color: var(--text3); text-decoration: line-through; }
+.mgr-vac-after        { color: var(--mint); font-weight: 900; }
+.mgr-apply-btn        { width: 100%; font-size: .75rem; padding: 5px 0; }
+.mgr-panel-hint       { font-size: .68rem; color: var(--text3); text-align: center; font-style: italic; }
+
+/* ═══════════════════════════════════════════════
+   VACANCY PERCENTAGE BADGE (marketplace cards)
+═══════════════════════════════════════════════ */
+.vacancy-pct-badge    { font-size: .72rem; font-weight: 900; padding: 2px 7px; border-radius: 5px; }
+.vac-low  { background: var(--mint-light); color: var(--mint); }
+.vac-med  { background: var(--gold-light); color: var(--gold-b); }
+.vac-high { background: var(--red-light);  color: var(--red); }
+
+/* ═══════════════════════════════════════════════
+   FINAL YEAR BANNER (year start overlay)
+═══════════════════════════════════════════════ */
+.final-year-banner {
+  background: linear-gradient(135deg, var(--gold) 0%, var(--coral) 100%);
+  color: white; font-size: .85rem; font-weight: 800;
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  text-align: center; margin-bottom: 10px;
+  animation: pulseEnd 1.6s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════
+   VERSION BADGE
+═══════════════════════════════════════════════ */
+#version-badge {
+  position: absolute; bottom: 10px; right: 14px;
+  font-size: .68rem; font-weight: 800; color: rgba(255,255,255,.55);
+  letter-spacing: .08em; pointer-events: none; z-index: 5;
+}

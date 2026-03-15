@@ -18,6 +18,7 @@
     <div id="title-overlay">
       <button class="btn-primary" id="btn-title-play">▶ Play Game</button>
     </div>
+    <div id="version-badge">v1.3.0</div>
 
     <!-- How-to-play panel (shown after pressing Play) -->
     <div id="howtoplay-panel" class="hidden">
@@ -249,6 +250,7 @@
           <h2 id="ys-title">Year 1</h2>
           <span class="yearstart-subtitle" id="ys-subtitle"></span>
         </div>
+        <div id="ys-final-year-banner" class="final-year-banner hidden"></div>
         <div id="ys-market-change" style="margin-bottom:12px;"></div>
         <div class="recap-grid" id="ys-recap-grid"></div>
         <div style="text-align:center;margin-top:8px;">
@@ -319,6 +321,19 @@
         <div id="dev-results"></div>
         <div style="text-align:center;margin-top:16px;">
           <button class="btn-primary" id="btn-dismiss-dev">Continue →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Influence Alert Overlay (shown to targeted player) -->
+    <div id="overlay-influence-alert" class="overlay hidden">
+      <div class="overlay-card infl-alert-card">
+        <div class="infl-alert-icon">⚠️</div>
+        <div class="infl-alert-attacker" id="infl-alert-attacker"></div>
+        <div class="infl-alert-title" id="infl-alert-title"></div>
+        <div class="infl-alert-desc" id="infl-alert-desc"></div>
+        <div style="text-align:center;margin-top:18px;">
+          <button class="btn-primary" id="btn-dismiss-infl-alert">Got it</button>
         </div>
       </div>
     </div>

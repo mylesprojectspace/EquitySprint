@@ -43,9 +43,9 @@ const CHEAP_VACANCY_BONUS   = 0.10;
 const SALARY_GROWTH_RATE    = 0.03;
 const INFLUENCE_HAND_MAX    = 3;
 
-const MANAGER_NAMES             = ['None', 'Basic', 'Standard', 'Premium'];
-const MANAGER_COSTS             = [0, 2000, 4000, 8000];
-const MANAGER_VACANCY_REDUCTION = [0, 0.02, 0.04, 0.07];
+// Manager: flat annual fee 0–10000 → vacancy reduction up to 10%
+const MANAGER_FEE_MAX           = 10000;
+const MANAGER_VACANCY_MAX_REDUCTION = 0.10;
 
 const RISK_GROWTH_MULT = { low: 0.6, medium: 1.0, high: 1.5 };
 
@@ -277,7 +277,7 @@ function playInfluenceCard(G, playerIdx, handId, targetPlayerIdx, targetOwnedId)
   // Remove from hand after successful play
   hand.splice(cardIdx, 1);
   addLog(G, `${G.players[playerIdx].name} played Market Influence: ${card.title}`);
-  return { ok: true };
+  return { ok: true, card, playedByIdx: playerIdx, targetPlayerIdx: targetPlayerIdx ?? null };
 }
 
 function applyInfluenceEffect(G, card, playerIdx, targetPlayerIdx, targetOwnedId) {
@@ -618,7 +618,7 @@ function executeBuy(G, player, prop, check) {
     currentRent:     prop.rent,
     debt:            check.loanAmount,
     vacantThisRound: false,
-    managerTier:     0,
+    managerFee:      0,
     depositPaid:     check.deposit,
     extraSpent:      0,
     _ownedId:        ++G._ownedIdSeq,
@@ -873,17 +873,18 @@ function checkPendingDevelopments(G, playerIdx) {
   return results;
 }
 
-function actionSetManager(G, playerIdx, oid, tier) {
+function actionSetManager(G, playerIdx, oid, fee) {
   // Does NOT consume an action slot
   const player = G.players[playerIdx];
   if (playerIdx !== G.currentPlayerIdx) return { ok: false, reason: 'Not your turn.' };
 
   const prop = player.properties.find(p => p._ownedId === oid);
   if (!prop) return { ok: false, reason: 'Property not found.' };
-  if (tier < 0 || tier > 3) return { ok: false, reason: 'Invalid tier.' };
 
-  prop.managerTier = tier;
-  addLog(G, `${player.name} set ${prop.city} property manager to ${MANAGER_NAMES[tier]}.`);
+  fee = Math.round(Math.min(MANAGER_FEE_MAX, Math.max(0, parseInt(fee) || 0)) / 500) * 500;
+  prop.managerFee = fee;
+  const feeLabel = fee === 0 ? 'None (removed)' : `$${fmt(fee)}/yr`;
+  addLog(G, `${player.name} set ${prop.city} property manager fee to ${feeLabel}.`);
   return { ok: true, noSlot: true };
 }
 
@@ -918,9 +919,10 @@ function processAllPlayerCashFlow(G) {
         pr._missedRent     = pr.currentRent;
         return;
       }
-      const tier            = pr.managerTier || 0;
+      const fee             = pr.managerFee || 0;
       const cheapFactor     = Math.max(0, (CHEAP_PRICE_THRESHOLD - pr.currentValue) / CHEAP_PRICE_THRESHOLD);
-      const baseVacancy     = Math.max(0, pr.vacancy - MANAGER_VACANCY_REDUCTION[tier]);
+      const vacancyReduction = (fee / MANAGER_FEE_MAX) * MANAGER_VACANCY_MAX_REDUCTION;
+      const baseVacancy     = Math.max(0, pr.vacancy - vacancyReduction);
       const effectiveVacancy = Math.min(0.95, baseVacancy + CHEAP_VACANCY_BONUS * cheapFactor);
       pr.vacantThisRound    = Math.random() < effectiveVacancy;
       pr._missedRent        = pr.vacantThisRound ? pr.currentRent : 0;
@@ -933,7 +935,7 @@ function processAllPlayerCashFlow(G) {
 
     let managerCosts = 0;
     p.properties.forEach(pr => {
-      const cost = MANAGER_COSTS[pr.managerTier || 0];
+      const cost = pr.managerFee || 0;
       if (cost > 0) managerCosts += cost;
     });
     if (managerCosts > 0) {
