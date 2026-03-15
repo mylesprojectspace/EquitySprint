@@ -135,6 +135,8 @@ function runBotTurn(roomId) {
       G.phase = 'action';
       const renoResults = engine.checkPendingRenovations(G, botIdx);
       if (renoResults.length) io.to(roomId).emit('reno-complete', renoResults);
+      const devResults = engine.checkPendingDevelopments(G, botIdx);
+      if (devResults.length) io.to(roomId).emit('dev-complete', devResults);
       broadcastState(roomId);
       broadcastAllPrivateStates(roomId);
       break;
@@ -440,11 +442,11 @@ io.on('connection', (socket) => {
     if (playerIdx !== G.currentPlayerIdx) return;
 
     G.phase = 'action';
-    // Check for completed renovations
+    // Check for completed renovations + developments
     const renoResults = engine.checkPendingRenovations(G, playerIdx);
-    if (renoResults.length) {
-      io.to(roomId).emit('reno-complete', renoResults);
-    }
+    if (renoResults.length) io.to(roomId).emit('reno-complete', renoResults);
+    const devResults = engine.checkPendingDevelopments(G, playerIdx);
+    if (devResults.length) io.to(roomId).emit('dev-complete', devResults);
     broadcastState(roomId);
     broadcastAllPrivateStates(roomId);
     maybeTriggerBot(roomId);

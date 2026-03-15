@@ -660,8 +660,9 @@ function actionRenovate(G, playerIdx, oid) {
 
   const prop = player.properties.find(p => p._ownedId === oid);
   if (!prop)          return { ok: false, reason: 'Property not found.' };
-  if (prop.renovated) return { ok: false, reason: `${prop.city} has already been renovated.` };
+  if (prop.renovated)   return { ok: false, reason: `${prop.city} has already been renovated.` };
   if (prop._renovating) return { ok: false, reason: `${prop.city} renovation already in progress.` };
+  if (prop._developing) return { ok: false, reason: `${prop.city} is currently being developed. Wait for it to complete first.` };
 
   let cost = player.freeRenoNextRound ? 0 : Math.round(prop.currentValue * RENO_COST_MULT);
   if (player.renoDiscountNextRound) cost = Math.round(cost * 0.5);
@@ -791,45 +792,71 @@ function actionDevelop(G, playerIdx, oid) {
   if (playerIdx !== G.currentPlayerIdx) return { ok: false, reason: 'Not your turn.' };
 
   const prop = player.properties.find(p => p._ownedId === oid);
-  if (!prop)           return { ok: false, reason: 'Property not found.' };
-  if (prop.developed)  return { ok: false, reason: `${prop.city} already developed.` };
+  if (!prop)            return { ok: false, reason: 'Property not found.' };
+  if (prop.developed)   return { ok: false, reason: `${prop.city} already developed.` };
+  if (prop._developing) return { ok: false, reason: `${prop.city} development already in progress.` };
+  if (prop._renovating) return { ok: false, reason: `${prop.city} is currently being renovated. Finish the renovation first.` };
   if (prop.market !== 'regional') return { ok: false, reason: 'Development only on regional properties.' };
 
   const baseCost = Math.round(prop.currentValue * DEVELOP_COST_MULT);
   if (player.cash < baseCost)
     return { ok: false, reason: `Development requires $${fmt(baseCost)} — only have $${fmt(player.cash)}` };
 
-  const roll = Math.random();
-  let result;
-  if (roll < DEVELOP_SUCCESS) {
-    const rentBoost  = Math.round(prop.currentRent  * 0.40);
-    const valueBoost = Math.round(prop.currentValue * 0.30);
-    player.cash       -= baseCost;
-    prop.extraSpent    = (prop.extraSpent || 0) + baseCost;
-    prop.currentRent  += rentBoost;
-    prop.currentValue += valueBoost;
-    prop.developed     = true;
-    recalcPlayer(G, player);
-    addLog(G, `${player.name} developed ${prop.city}: rent +$${fmt(rentBoost)}/yr, value +$${fmt(valueBoost)}`);
-    result = {
-      ok: true, success: true,
-      icon: '🏗️', title: 'Development Succeeded!',
-      lines: [`Rent boost: +$${fmt(rentBoost)}/yr`, `Value boost: +$${fmt(valueBoost)}`, `Cost: $${fmt(baseCost)}`]
-    };
-  } else {
-    const finalCost = Math.min(Math.round(baseCost * 1.5), player.cash);
-    player.cash    -= finalCost;
-    prop.extraSpent = (prop.extraSpent || 0) + finalCost;
-    recalcPlayer(G, player);
-    addLog(G, `${player.name} developed ${prop.city}: COST OVERRUN — lost $${fmt(finalCost)}.`);
-    result = {
-      ok: true, success: false,
-      icon: '💸', title: 'Cost Overrun!',
-      lines: [`Lost: $${fmt(finalCost)}`, `No gain on ${prop.city}`]
-    };
-  }
+  // Duration: low risk = 1yr, medium = 2yr, high = 2 or 3yr (50/50)
+  const devDuration = prop.risk === 'low' ? 1
+    : prop.risk === 'high' ? (Math.random() < 0.5 ? 2 : 3)
+    : 2;
+
+  player.cash           -= baseCost;
+  prop.extraSpent        = (prop.extraSpent || 0) + baseCost;
+  prop._developing       = true;
+  prop._devYear          = G.year;
+  prop._devCompleteYear  = G.year + devDuration;
+
+  recalcPlayer(G, player);
+  addLog(G, `${player.name} started development on ${prop.city}. Cost $${fmt(baseCost)}. Completes Year ${G.year + devDuration}.`);
+  return {
+    ok: true,
+    icon: '🏗️', title: 'Development Started!',
+    lines: [
+      `Cost paid: $${fmt(baseCost)}`,
+      `${prop.city} is under construction`,
+      `60% chance of success on completion`,
+      `Completes in ${devDuration} year${devDuration > 1 ? 's' : ''} (Year ${G.year + devDuration})`,
+    ]
+  };
+}
+
+function checkPendingDevelopments(G, playerIdx) {
+  const player     = G.players[playerIdx];
+  const readyProps = player.properties.filter(p => {
+    if (!p._developing) return false;
+    return G.year >= (p._devCompleteYear ?? (p._devYear + 2));
+  });
+  const results = [];
+
+  readyProps.forEach(prop => {
+    const success = Math.random() < DEVELOP_SUCCESS;
+    if (success) {
+      const rentBoost  = Math.round(prop.currentRent  * 0.40);
+      const valueBoost = Math.round(prop.currentValue * 0.30);
+      prop.currentRent  += rentBoost;
+      prop.currentValue += valueBoost;
+      prop.developed     = true;
+      addLog(G, `${player.name}'s development on ${prop.city} succeeded: rent +$${fmt(rentBoost)}/yr, value +$${fmt(valueBoost)}.`);
+      results.push({ prop: prop.city, success: true, rentBoost, valueBoost });
+    } else {
+      addLog(G, `${player.name}'s development on ${prop.city} failed — cost already paid, no gain.`);
+      results.push({ prop: prop.city, success: false });
+    }
+    prop._developing      = false;
+    prop._devYear         = null;
+    prop._devCompleteYear = null;
+  });
+
+  recalcPlayer(G, player);
   checkWin(G);
-  return result;
+  return results;
 }
 
 function actionSetManager(G, playerIdx, oid, tier) {
@@ -1335,8 +1362,9 @@ module.exports = {
   acknowledgeWheelResult,
   // Influence cards
   playInfluenceCard,
-  // Renovation check
+  // Renovation + development checks
   checkPendingRenovations,
+  checkPendingDevelopments,
   // Actions
   actionBuy,
   actionReduceDebt,

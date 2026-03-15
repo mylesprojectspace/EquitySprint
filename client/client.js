@@ -202,7 +202,7 @@ function hideOverlay(id) {
   document.getElementById(id).classList.add('hidden');
 }
 function hideAllOverlays() {
-  ['overlay-wheel','overlay-yearstart','overlay-handoff','overlay-auction','overlay-gameover','overlay-reno']
+  ['overlay-wheel','overlay-yearstart','overlay-handoff','overlay-auction','overlay-gameover','overlay-reno','overlay-dev']
     .forEach(id => hideOverlay(id));
 }
 
@@ -334,6 +334,11 @@ function initSocket() {
     pendingRenoResults = results;
     renderRenoComplete(results);
     showOverlay('overlay-reno');
+  });
+
+  socket.on('dev-complete', (results) => {
+    renderDevComplete(results);
+    showOverlay('overlay-dev');
   });
 
   socket.on('player-emote', ({ playerIdx, emoteId }) => {
@@ -2220,16 +2225,16 @@ function openDevConfirmModal(prop, oid) {
       </div>
       <div class="reno-stat">
         <div class="reno-stat-label">Duration</div>
-        <div class="reno-stat-value">1–2 yrs</div>
+        <div class="reno-stat-value">1–3 yrs</div>
       </div>
       <div class="reno-stat">
         <div class="reno-stat-label">If Successful</div>
-        <div class="reno-stat-value pos">Higher rent &amp; growth</div>
+        <div class="reno-stat-value pos">+40% rent · +30% value</div>
       </div>
     </div>
   `;
   document.getElementById('dev-confirm-desc').textContent =
-    'Development cost is non-refundable. If it fails (40% chance), the property stays undeveloped and you lose the investment.';
+    'Cost is paid upfront and non-refundable. Success is revealed when construction finishes (1–3 years depending on risk). 40% chance of no gain.';
   document.getElementById('modal-dev-confirm').classList.remove('hidden');
 }
 
@@ -2540,6 +2545,27 @@ function renderRenoComplete(results) {
   }).join('');
 }
 
+// ── Dev Complete Overlay ───────────────────────────────────
+function renderDevComplete(results) {
+  const el = document.getElementById('dev-results');
+  if (!el) return;
+  el.innerHTML = results.map(r => {
+    if (r.success) {
+      return `<div class="reno-item" style="border-left:3px solid var(--mint);">
+        <strong>🏗 ${escHtml(r.prop)}</strong>
+        <div style="color:var(--mint);font-weight:700;">✓ Development Succeeded!</div>
+        <div>Rent +${fmt(r.rentBoost)}/yr · Value +${fmt(r.valueBoost)}</div>
+      </div>`;
+    } else {
+      return `<div class="reno-item" style="border-left:3px solid var(--red);">
+        <strong>🏗 ${escHtml(r.prop)}</strong>
+        <div style="color:var(--red);font-weight:700;">✗ Development Failed</div>
+        <div style="font-size:.78rem;color:var(--text2);">Cost already paid — no gain this time.</div>
+      </div>`;
+    }
+  }).join('');
+}
+
 // ── Star Ratings ───────────────────────────────────────────
 function computeStarRatings(cards) {
   if (!cards.length) return {};
@@ -2618,6 +2644,11 @@ function initGameButtons() {
   document.getElementById('btn-dismiss-reno').addEventListener('click', () => {
     pendingRenoResults = null;
     hideOverlay('overlay-reno');
+    renderPhaseOverlays();
+  });
+
+  document.getElementById('btn-dismiss-dev').addEventListener('click', () => {
+    hideOverlay('overlay-dev');
     renderPhaseOverlays();
   });
 
