@@ -1,0 +1,17 @@
+{
+  "name": "equity-sprint-online",
+  "version": "1.0.0",
+  "description": "Australian property investment board game — online multiplayer",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.39.1"
+  }
+}

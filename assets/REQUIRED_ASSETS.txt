@@ -1,0 +1,112 @@
+EQUITY SPRINT ONLINE — Required Property Photo Assets
+======================================================
+
+These images are used as the hero image on marketplace property cards.
+Placeholder CSS gradients are used until real photos are sourced.
+
+Once photos are added:
+  - Place each file in this /assets/ folder
+  - Name the file exactly as listed below
+  - The client will auto-detect and replace the gradient placeholder
+
+------------------------------------------------------
+SPECIFICATIONS
+------------------------------------------------------
+  Format:   JPEG or WebP (preferred)
+  Size:     400 × 300 px minimum (will be cropped to 16:9 ratio on card)
+  Style:    Exterior shot of the property — no people, no text overlays
+  Tone:     Realistic Australian residential/commercial photography
+            Clean natural lighting. Day shots preferred.
+            Should look like a real estate listing photo.
+
+------------------------------------------------------
+REQUIRED FILES (one per property type)
+------------------------------------------------------
+
+  unit.jpg
+    → A modern apartment unit exterior in a mid-density building
+    → e.g. 3–5 storey brick or render apartment, street level view
+    → Represents: Townsville Unit, Rockhampton Unit, Adelaide Unit,
+                  Perth Unit, Brisbane Unit, Cairns Unit
+
+  house.jpg
+    → A detached family home with front garden/driveway
+    → e.g. Queensland Queenslander or Federation style, wide frontage
+    → Represents: Sydney, Brisbane, Perth, Adelaide, Canberra houses
+                  and most regional houses (Ballarat, Toowoomba, etc.)
+
+  warehouse.jpg
+    → An inner-city converted warehouse or industrial-chic building
+    → e.g. exposed brick, large windows, Melbourne laneway aesthetic
+    → Represents: Melbourne warehouse
+
+  apartment.jpg
+    → A high-rise or mid-rise apartment building, coastal setting
+    → e.g. Gold Coast waterfront tower or modern glassy building
+    → Represents: Gold Coast apartment
+
+  cottage.jpg
+    → A heritage or character cottage — weatherboard or sandstone
+    → e.g. Hobart colonial cottage or Launceston heritage home
+    → Represents: Hobart cottage, Launceston cottage, Byron Bay Cottage
+
+  duplex.jpg
+    → A side-by-side duplex in a leafy suburban street
+    → e.g. Sydney North Shore or Brisbane gentrified suburb
+    → Represents: Lane Cove Duplex
+
+  terrace.jpg
+    → A Victorian or Edwardian terrace row
+    → e.g. Brisbane Teneriffe or Sydney inner-west terrace
+    → Represents: Teneriffe Terrace
+
+  heritage-house.jpg
+    → An art deco or interwar prestige home
+    → e.g. Melbourne South Yarra statement home, well-maintained
+    → Represents: South Yarra Heritage
+
+  beach-house.jpg
+    → A beachfront or ocean-view home
+    → e.g. Perth Cottesloe limestone or Hamptons-style beach house
+    → Represents: Cottesloe Beach House
+
+  estate.jpg
+    → A large rural property with acreage — acreage home or homestead
+    → e.g. Noosa hinterland — lush green, rural backdrop
+    → Represents: Noosa Hinterland Estate
+
+  penthouse.jpg
+    → A premium apartment building exterior from a low angle
+       showing rooftop or sky setting, Sydney CBD or Bondi backdrop
+    → Represents: Bondi Penthouse
+
+  manor.jpg
+    → A grand Melbourne prestige mansion — Toorak style
+    → e.g. double-storey period home with manicured gardens, iron gates
+    → Represents: Toorak Manor
+
+------------------------------------------------------
+PLACEHOLDER FALLBACK (used until images are added)
+------------------------------------------------------
+Each property type uses a CSS gradient + emoji icon as placeholder:
+  unit           → slate blue gradient      + 🏢
+  house          → green gradient           + 🏠
+  warehouse      → charcoal gradient        + 🏭
+  apartment      → teal gradient            + 🏙️
+  cottage        → warm terracotta gradient + 🏡
+  duplex         → mid-blue gradient        + 🏘️
+  terrace        → burgundy gradient        + 🏛️
+  heritage-house → dark navy gradient       + 🏯
+  beach-house    → ocean blue gradient      + 🏖️
+  estate         → olive green gradient     + 🌿
+  penthouse      → deep purple gradient     + ✨
+  manor          → dark gold gradient       + 👑
+
+------------------------------------------------------
+OPTIONAL: City-specific overrides
+------------------------------------------------------
+If you want a unique image for a specific city (e.g. just Sydney),
+add a file named after the city slug:
+  sydney.jpg, melbourne.jpg, bondi-penthouse.jpg, toorak-manor.jpg, etc.
+(spaces replaced with hyphens, all lowercase)
+The client checks for a city-specific image before falling back to propType.

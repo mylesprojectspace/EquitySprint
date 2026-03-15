@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>body{margin:0;}svg{display:block;width:1380px;height:770px;}</style>
+</head>
+<body>
+<svg viewBox="0 0 1380 770" xmlns="http://www.w3.org/2000/svg">
+  <image href="/assets/australia-map.png" x="0" y="0" width="1380" height="770"/>
+  <!-- Horizontal scan lines at key y values for WA coast -->
+  <line x1="0" y1="393" x2="600" y2="393" stroke="lime" stroke-width="1.5" opacity=".8"/>
+  <line x1="0" y1="490" x2="600" y2="490" stroke="cyan" stroke-width="1.5" opacity=".8"/>
+  <line x1="0" y1="548" x2="600" y2="548" stroke="yellow" stroke-width="1.5" opacity=".8"/>
+  <!-- Test markers at progressive x positions to find coast -->
+  <g>
+    <!-- At y=490 (Perth), test x positions from 200 to 500 in steps of 25 -->
+    <circle cx="200" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="225" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="250" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="275" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="300" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="325" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="350" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="375" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="400" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="425" cy="490" r="4" fill="red" opacity=".7"/>
+    <circle cx="450" cy="490" r="4" fill="red" opacity=".7"/>
+    <!-- Labels -->
+    <text x="198" y="483" font-size="9" fill="white" font-weight="bold">200</text>
+    <text x="348" y="483" font-size="9" fill="white" font-weight="bold">350</text>
+    <text x="448" y="483" font-size="9" fill="white" font-weight="bold">450</text>
+  </g>
+</svg>
+</body></html>

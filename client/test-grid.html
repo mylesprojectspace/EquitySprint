@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Map Coordinate Grid</title>
+  <style>
+    body { margin: 0; background: #fff; }
+    svg { display: block; width: 1380px; height: 770px; }
+  </style>
+</head>
+<body>
+<svg viewBox="0 0 1380 770" xmlns="http://www.w3.org/2000/svg">
+  <image href="/assets/australia-map.png" x="0" y="0" width="1380" height="770"/>
+  <g id="grid">
+    <script type="text/javascript">
+    </script>
+  </g>
+</svg>
+<script>
+  const svg = document.querySelector('svg');
+  const ns = 'http://www.w3.org/2000/svg';
+  const g = document.getElementById('grid');
+
+  // Draw vertical lines every 50px
+  for (let x = 0; x <= 1380; x += 50) {
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', x); line.setAttribute('y1', 0);
+    line.setAttribute('x2', x); line.setAttribute('y2', 770);
+    line.setAttribute('stroke', 'rgba(255,0,0,0.4)');
+    line.setAttribute('stroke-width', x % 100 === 0 ? '2' : '0.5');
+    g.appendChild(line);
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', x + 2); t.setAttribute('y', 13);
+    t.setAttribute('font-size', x % 100 === 0 ? '11' : '8'); t.setAttribute('fill', 'red'); t.setAttribute('font-weight', 'bold');
+    t.textContent = x % 100 === 0 ? x : '';
+    g.appendChild(t);
+  }
+
+  // Draw horizontal lines every 50px
+  for (let y = 0; y <= 770; y += 50) {
+    const line = document.createElementNS(ns, 'line');
+    line.setAttribute('x1', 0); line.setAttribute('y1', y);
+    line.setAttribute('x2', 1380); line.setAttribute('y2', y);
+    line.setAttribute('stroke', 'rgba(0,100,255,0.4)');
+    line.setAttribute('stroke-width', y % 100 === 0 ? '2' : '0.5');
+    g.appendChild(line);
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', 3); t.setAttribute('y', y + 12);
+    t.setAttribute('font-size', '11'); t.setAttribute('fill', 'blue'); t.setAttribute('font-weight', 'bold');
+    t.textContent = y;
+    g.appendChild(t);
+  }
+
+  // Mark key city positions for calibration
+  const marks = [
+    { x: 288,  y: 490, label: 'Perth' },
+    { x: 963,  y: 388, label: 'Brisbane' },
+    { x: 973,  y: 528, label: 'Sydney' },
+    { x: 963,  y: 616, label: 'Melbourne' },
+    { x: 848,  y: 557, label: 'Adelaide' },
+    { x: 605,  y: 83,  label: 'Darwin' },
+    { x: 883,  y: 155, label: 'Cairns' },
+    { x: 1060, y: 718, label: 'Hobart' },
+    { x: 948,  y: 562, label: 'Canberra' },
+    { x: 968,  y: 408, label: 'Gold Coast' },
+    { x: 895,  y: 220, label: 'Townsville' },
+    { x: 952,  y: 305, label: 'Rockhampton' },
+    { x: 285,  y: 548, label: 'Bunbury' },
+    { x: 285,  y: 393, label: 'Geraldton' },
+    { x: 865,  y: 510, label: 'Broken Hill' },
+    { x: 930,  y: 260, label: 'Mackay' },
+    { x: 963,  y: 370, label: 'Sunshine Cst' },
+    { x: 975,  y: 488, label: 'Newcastle' },
+    { x: 948,  y: 400, label: 'Toowoomba' },
+  ];
+  marks.forEach(m => {
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', m.x); c.setAttribute('cy', m.y); c.setAttribute('r', '8');
+    c.setAttribute('fill', 'rgba(255,165,0,0.8)'); c.setAttribute('stroke', 'white'); c.setAttribute('stroke-width', '2');
+    g.appendChild(c);
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', m.x + 10); t.setAttribute('y', m.y + 4);
+    t.setAttribute('font-size', '10'); t.setAttribute('fill', 'white');
+    t.setAttribute('font-weight', 'bold');
+    t.setAttribute('style', 'text-shadow:0 1px 2px #000');
+    t.textContent = m.label;
+    g.appendChild(t);
+  });
+</script>
+</body>
+</html>

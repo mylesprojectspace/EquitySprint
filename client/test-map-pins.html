@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Map Pin Test</title>
+  <style>
+    body { margin: 0; background: #1a1a2e; }
+    #wrap { position: relative; display: inline-block; }
+    svg { display: block; width: 1380px; height: 770px; }
+    .pin-label { font: bold 11px Arial; fill: white; text-shadow: 0 1px 3px #000; pointer-events: none; }
+    .pin-dot { fill: #FF6B6B; stroke: white; stroke-width: 2; }
+    .pin-dot.missing { fill: #aaa; }
+    .legend { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,.8); color: white; padding: 12px; font: 13px Arial; border-radius: 8px; }
+    .legend .ok { color: #FF6B6B; }
+    .legend .missing { color: #aaa; }
+  </style>
+</head>
+<body>
+<div class="legend">
+  <b>Map Pin Test</b><br>
+  <span class="ok">● Known coords</span><br>
+  <span class="missing">● Missing / fallback</span>
+</div>
+<div id="wrap">
+<svg viewBox="0 0 1380 770" xmlns="http://www.w3.org/2000/svg">
+  <image href="/assets/australia-map.png" x="0" y="0" width="1380" height="770"/>
+  <g id="pins"></g>
+</svg>
+</div>
+<script>
+// Replicated from client.js
+const CITY_COORDS = {
+  'Sydney':         { x: 973,  y: 528 },
+  'Melbourne':      { x: 963,  y: 616 },
+  'Brisbane':       { x: 963,  y: 388 },
+  'Perth':          { x: 360,  y: 490 },
+  'Adelaide':       { x: 848,  y: 557 },
+  'Gold Coast':     { x: 968,  y: 408 },
+  'Hobart':         { x: 1060, y: 718 },
+  'Darwin':         { x: 605,  y: 83  },
+  'Canberra':       { x: 948,  y: 562 },
+  'Newcastle':      { x: 975,  y: 488 },
+  'Wollongong':     { x: 965,  y: 548 },
+  'Geelong':        { x: 942,  y: 628 },
+  'Ballarat':       { x: 930,  y: 614 },
+  'Toowoomba':      { x: 948,  y: 400 },
+  'Rockhampton':    { x: 952,  y: 305 },
+  'Townsville':     { x: 895,  y: 220 },
+  'Cairns':         { x: 883,  y: 155 },
+  'Broken Hill':    { x: 865,  y: 510 },
+  'Dubbo':          { x: 920,  y: 505 },
+  'Bondi':          { x: 975,  y: 533 },
+  'Lane Cove':      { x: 973,  y: 521 },
+  'South Yarra':    { x: 963,  y: 622 },
+  'Toorak':         { x: 966,  y: 625 },
+  'Teneriffe':      { x: 963,  y: 394 },
+  'Fremantle':      { x: 287,  y: 498 },
+  'Cottesloe':      { x: 289,  y: 494 },
+  'Sunshine Coast': { x: 963,  y: 370 },
+  'Noosa':          { x: 960,  y: 363 },
+  'Noosa Hinterland': { x: 958, y: 358 },
+  'Byron Bay':      { x: 968,  y: 432 },
+  'Bunbury':        { x: 298,  y: 548 },
+  'Wagga Wagga':    { x: 930,  y: 577 },
+  'Bendigo':        { x: 928,  y: 600 },
+  'Launceston':     { x: 1055, y: 700 },
+  'Mackay':         { x: 930,  y: 260 },
+  'Geraldton':      { x: 295,  y: 393 },
+  'Albury':         { x: 925,  y: 593 },
+  'Bathurst':       { x: 938,  y: 550 },
+};
+
+function cityName(cityField) {
+  return cityField.replace(/\s+(Unit|House|Apartment|Duplex|Cottage|Terrace|Warehouse|Beach-House|Estate|Penthouse|Manor|Heritage-House|Heritage\s+House|Heritage)$/i, '').trim();
+}
+function cityCoords(cityField) {
+  if (CITY_COORDS[cityField]) return CITY_COORDS[cityField];
+  const stripped = cityName(cityField);
+  if (CITY_COORDS[stripped]) return CITY_COORDS[stripped];
+  const words = stripped.split(' ');
+  for (let i = words.length - 1; i > 0; i--) {
+    const candidate = words.slice(0, i).join(' ');
+    if (CITY_COORDS[candidate]) return CITY_COORDS[candidate];
+  }
+  return null;
+}
+
+// All city fields from data.js
+const ALL_CITIES = [
+  "Townsville Unit","Rockhampton Unit","Adelaide Unit","Perth Unit","Brisbane Unit",
+  "Cairns Unit","Sydney","Melbourne","Brisbane","Perth","Gold Coast","Adelaide",
+  "Canberra","Hobart","Ballarat","Toowoomba","Bunbury","Wagga Wagga","Bendigo",
+  "Launceston","Mackay","Geraldton","Newcastle","Sunshine Coast","Albury","Bathurst",
+  "Lane Cove Duplex","Teneriffe Terrace","Byron Bay Cottage","South Yarra Heritage",
+  "Cottesloe Beach House","Noosa Hinterland Estate","Bondi Penthouse","Toorak Manor"
+];
+
+const g = document.getElementById('pins');
+const seen = new Set();
+
+ALL_CITIES.forEach(cityField => {
+  const cn = cityName(cityField);
+  if (seen.has(cn)) return; // dedupe
+  seen.add(cn);
+
+  const coord = cityCoords(cityField);
+  const missing = !coord;
+  const x = coord ? coord.x : 690;
+  const y = coord ? coord.y : 385;
+  const cls = missing ? 'pin-dot missing' : 'pin-dot';
+
+  g.innerHTML += `
+    <circle cx="${x}" cy="${y}" r="10" class="${cls}"/>
+    <text x="${x}" y="${y - 14}" text-anchor="middle" class="pin-label">${cn}${missing ? ' ⚠' : ''}</text>
+  `;
+});
+</script>
+</body>
+</html>
