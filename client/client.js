@@ -700,7 +700,7 @@ function buildPortfolioHtml(p) {
       prop.market === 'regional' && !prop.developed && !isDev
         ? `<span class="badge badge-develop">Dev Ready</span>` : '',
       prop.vacantThisRound ? `<span class="badge" style="background:var(--red-light);color:var(--red);">Vacant</span>` : '',
-      prop.managerTier > 0 ? `<span class="badge" style="background:var(--blue-light);color:var(--blue);">Mgr ${prop.managerTier}</span>` : '',
+      prop.managerFee > 0 ? `<span class="badge" style="background:var(--blue-light);color:var(--blue);">Mgr $${fmt(prop.managerFee)}/yr</span>` : '',
     ].filter(Boolean).join('');
 
     // Upgrade progress bar
@@ -976,7 +976,6 @@ function renderRightPanels() {
     if (p.freeRenoNextRound)     eventsHtml += rpEventCard('🎁', 'Free Renovation', 'Next reno costs nothing', 'var(--mint)');
     if (p.renoDiscountNextRound) eventsHtml += rpEventCard('🎁', '50% Reno Off', 'Next reno half price', 'var(--mint)');
     if (p.personalRateDiscountYears > 0) eventsHtml += rpEventCard('↓', 'Rate Discount', `${p.personalRateDiscountYears} yr remaining`, 'var(--blue)');
-    if (p.vacancyBlockYears > 0) eventsHtml += rpEventCard('🚫', 'Vacancy Risk', `${p.vacancyBlockYears} yr remaining`, 'var(--red)');
   }
   if (!eventsHtml) eventsHtml = `<div class="rp-empty">All clear — no active events</div>`;
 
@@ -1407,18 +1406,23 @@ function ownedModalCardHtml(prop, p) {
       </div>
       ${progressHtml}
       ${actions ? `<div class="omc-actions">${actions}</div>` : ''}
-      <div class="mgr-panel" data-oid="${prop._ownedId}">
-        <div class="mgr-panel-header">
-          <span class="mgr-panel-label">Property Manager</span>
-          <span class="mgr-fee-live">$${fmt(prop.managerFee || 0)}/yr</span>
-        </div>
-        <input type="range" class="mgr-slider" min="0" max="10000" step="500" value="${prop.managerFee || 0}" data-oid="${prop._ownedId}" data-base-vacancy="${prop.vacancy}">
-        <div class="mgr-vacancy-preview">
-          Vacancy: <span class="mgr-vac-before">${Math.round(prop.vacancy * 100)}%</span>
-          → <span class="mgr-vac-after">${Math.round(Math.max(0, prop.vacancy - ((prop.managerFee || 0) / 10000) * 0.10) * 100)}%</span>
-        </div>
-        ${isMyTurn ? `<button class="btn-secondary mgr-apply-btn" data-oid="${prop._ownedId}">Apply Fee</button>` : '<div class="mgr-panel-hint">Available on your turn</div>'}
-      </div>
+      ${(() => {
+        const maxUsefulFee = Math.min(10000, Math.ceil((prop.vacancy / 0.10) * 10000 / 500) * 500);
+        const curFee = Math.min(prop.managerFee || 0, maxUsefulFee);
+        const curAdj = Math.round(Math.max(0, prop.vacancy - (curFee / 10000) * 0.10) * 100);
+        return `<div class="mgr-panel" data-oid="${prop._ownedId}">
+          <div class="mgr-panel-header">
+            <span class="mgr-panel-label">Property Manager</span>
+            <span class="mgr-fee-live">${curFee === 0 ? 'None' : `$${fmt(curFee)}/yr`}</span>
+          </div>
+          <input type="range" class="mgr-slider" min="0" max="${maxUsefulFee}" step="500" value="${curFee}" data-oid="${prop._ownedId}" data-base-vacancy="${prop.vacancy}" data-max-useful="${maxUsefulFee}">
+          <div class="mgr-vacancy-preview">
+            Vacancy: <span class="mgr-vac-before">${Math.round(prop.vacancy * 100)}%</span>
+            → <span class="mgr-vac-after ${curAdj === 0 ? 'vac-zero' : ''}">${curAdj === 0 ? '0% ✓ Fully covered' : curAdj + '%'}</span>
+          </div>
+          ${isMyTurn ? `<button class="btn-secondary mgr-apply-btn" data-oid="${prop._ownedId}">Apply Fee</button>` : '<div class="mgr-panel-hint">Available on your turn</div>'}
+        </div>`;
+      })()}
     </div>
   </div>`;
 }
@@ -1481,8 +1485,10 @@ function openPortfolioModal() {
       const fee = parseInt(slider.value) || 0;
       const reduction = (fee / 10000) * 0.10;
       const adjusted = Math.max(0, baseVacancy - reduction);
-      feeDisplay.textContent = fee === 0 ? '$0/yr (none)' : `$${fee.toLocaleString('en-AU')}/yr`;
-      vacAfter.textContent = Math.round(adjusted * 100) + '%';
+      feeDisplay.textContent = fee === 0 ? 'None' : `$${fee.toLocaleString('en-AU')}/yr`;
+      const adjPct = Math.round(adjusted * 100);
+      vacAfter.textContent = adjPct === 0 ? '0% ✓ Fully covered' : adjPct + '%';
+      vacAfter.classList.toggle('vac-zero', adjPct === 0);
     });
   });
 

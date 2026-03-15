@@ -882,6 +882,9 @@ function actionSetManager(G, playerIdx, oid, fee) {
   if (!prop) return { ok: false, reason: 'Property not found.' };
 
   fee = Math.round(Math.min(MANAGER_FEE_MAX, Math.max(0, parseInt(fee) || 0)) / 500) * 500;
+  // Cap at the fee that brings vacancy to 0 — paying more is wasteful
+  const maxUsefulFee = Math.ceil((prop.vacancy / MANAGER_VACANCY_MAX_REDUCTION) * MANAGER_FEE_MAX / 500) * 500;
+  fee = Math.min(fee, maxUsefulFee);
   prop.managerFee = fee;
   const feeLabel = fee === 0 ? 'None (removed)' : `$${fmt(fee)}/yr`;
   addLog(G, `${player.name} set ${prop.city} property manager fee to ${feeLabel}.`);

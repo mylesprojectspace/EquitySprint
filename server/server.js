@@ -377,7 +377,7 @@ io.on('connection', (socket) => {
     if (!room || !room.G) return emitError(socket, 'No active game.');
 
     const G = room.G;
-    if (G.phase !== 'action' && payload.action !== 'endSlot') {
+    if (G.phase !== 'action' && !['endSlot', 'setManager'].includes(payload.action)) {
       return emitError(socket, `Cannot act in phase: ${G.phase}`);
     }
     if (playerIdx !== G.currentPlayerIdx && payload.action !== 'setManager') {

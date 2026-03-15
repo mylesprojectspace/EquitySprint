@@ -1837,6 +1837,7 @@ select:focus { border-color: var(--blue); }
 .mgr-vacancy-preview  { font-size: .72rem; font-weight: 700; color: var(--text2); margin-bottom: 6px; }
 .mgr-vac-before       { color: var(--text3); text-decoration: line-through; }
 .mgr-vac-after        { color: var(--mint); font-weight: 900; }
+.mgr-vac-after.vac-zero { color: var(--green); }
 .mgr-apply-btn        { width: 100%; font-size: .75rem; padding: 5px 0; }
 .mgr-panel-hint       { font-size: .68rem; color: var(--text3); text-align: center; font-style: italic; }
 
