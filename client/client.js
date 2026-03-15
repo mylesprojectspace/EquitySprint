@@ -2511,7 +2511,7 @@ function renderWheelResult(category, card, spinnerIdx) {
 function renderYearStartOverlay() {
   const isFinalYear = G.year >= 10;
   document.getElementById('ys-title').textContent = isFinalYear ? `⚡ Year ${G.year} — FINAL TURN!` : `Year ${G.year} — Summary`;
-  const yrsLeft = 10 - G.year + 1;
+  const yrsLeft = 10 - G.year;
   document.getElementById('ys-subtitle').textContent =
     isFinalYear ? 'Last chance to act — highest net worth wins!' :
     yrsLeft > 0 ? `${yrsLeft} year${yrsLeft !== 1 ? 's' : ''} remaining` : '';
@@ -2884,10 +2884,16 @@ function initGameButtons() {
   document.getElementById('btn-close-market').addEventListener('click', () => {
     document.getElementById('modal-market').classList.add('hidden');
   });
-  document.getElementById('dock-market-btn').addEventListener('click', () => openMarketModal());
+  document.getElementById('dock-market-btn').addEventListener('click', () => {
+    document.getElementById('modal-portfolio').classList.add('hidden');
+    openMarketModal();
+  });
 
   // Portfolio modal
-  document.getElementById('dock-props-btn').addEventListener('click', () => openPortfolioModal());
+  document.getElementById('dock-props-btn').addEventListener('click', () => {
+    document.getElementById('modal-market').classList.add('hidden');
+    openPortfolioModal();
+  });
   document.getElementById('btn-close-portfolio').addEventListener('click', () => {
     document.getElementById('modal-portfolio').classList.add('hidden');
   });

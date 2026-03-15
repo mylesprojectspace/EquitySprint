@@ -156,8 +156,13 @@ function runBotTurn(roomId) {
           if (result.ok) { broadcastActionResult(roomId, result); acted = true; }
         }
       }
-      // Bot ends turn after acting or when out of actions
-      if (!acted || G.actionsUsedThisSlot >= 2) engine.endActionSlot(G);
+      // Bot ends slot if it couldn't act or has used both actions
+      if (!acted || G.actionsUsedThisSlot >= 2) {
+        engine.endActionSlot(G);
+      } else {
+        // Acted but still has a second action — schedule another bot turn
+        maybeTriggerBot(roomId);
+      }
       broadcastState(roomId);
       broadcastAllPrivateStates(roomId);
       break;
