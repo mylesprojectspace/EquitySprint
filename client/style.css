@@ -1668,26 +1668,34 @@ select:focus { border-color: var(--blue); }
 #screen-title {
   position: relative; width: 100vw; height: 100vh;
   overflow: hidden; display: flex; align-items: center; justify-content: center;
+  /* Near-white matches the GIF's outer edge colour */
+  background: #f5f2ec;
 }
-#title-bg {
+#title-gif {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; object-position: center;
+  /* Gentle radial fade — only the outermost 12% dissolves into the bg */
+  -webkit-mask-image: radial-gradient(ellipse 90% 90% at 50% 48%,
+    black 72%, rgba(0,0,0,0.85) 84%, rgba(0,0,0,0.3) 94%, transparent 100%);
+  mask-image: radial-gradient(ellipse 90% 90% at 50% 48%,
+    black 72%, rgba(0,0,0,0.85) 84%, rgba(0,0,0,0.3) 94%, transparent 100%);
 }
 #title-overlay {
-  position: relative; z-index: 2;
+  position: absolute; bottom: 6%; left: 50%; transform: translateX(-50%);
+  z-index: 4;
   display: flex; flex-direction: column; align-items: center; gap: 16px;
-  margin-top: 62vh; /* push button to lower portion of image */
 }
 #title-overlay .btn-primary {
-  font-size: 1.1rem; font-weight: 900; padding: 14px 40px;
+  font-size: 1.15rem; font-weight: 900; padding: 15px 52px;
   border-radius: 14px 10px 14px 12px / 10px 14px 10px 14px;
-  box-shadow: 0 6px 24px rgba(0,0,0,.3); letter-spacing: .04em;
-  background: var(--coral); border-color: var(--coral-dark);
-  animation: titleBtnPulse 2.2s ease-in-out infinite;
+  letter-spacing: .06em;
+  background: #2d5fa8; border-color: #1e4585; color: #fff;
+  box-shadow: 0 4px 18px rgba(45,95,168,.55), 0 2px 6px rgba(0,0,0,.22);
+  animation: titleBtnPulse 2.4s ease-in-out infinite;
 }
 @keyframes titleBtnPulse {
-  0%, 100% { transform: scale(1);    box-shadow: 0 6px 24px rgba(0,0,0,.3); }
-  50%       { transform: scale(1.04); box-shadow: 0 8px 32px rgba(0,0,0,.38); }
+  0%, 100% { transform: scale(1);    box-shadow: 0 4px 18px rgba(45,95,168,.55), 0 2px 6px rgba(0,0,0,.22); }
+  50%       { transform: scale(1.05); box-shadow: 0 6px 28px rgba(45,95,168,.75), 0 4px 10px rgba(0,0,0,.28); }
 }
 
 /* How-to-play panel (over title screen) */
@@ -1865,6 +1873,6 @@ select:focus { border-color: var(--blue); }
 ═══════════════════════════════════════════════ */
 #version-badge {
   position: absolute; bottom: 10px; right: 14px;
-  font-size: .68rem; font-weight: 800; color: rgba(255,255,255,.55);
+  font-size: .68rem; font-weight: 800; color: rgba(60,50,40,.45);
   letter-spacing: .08em; pointer-events: none; z-index: 5;
 }

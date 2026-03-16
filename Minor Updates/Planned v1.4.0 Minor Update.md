@@ -1,0 +1,118 @@
+# Planned v1.4.0 Minor Update
+Equity Sprint Online — QoL polish items identified during full screenshot bug scan (March 2026).
+Status: NOT YET IMPLEMENTED
+
+---
+
+## UI / LAYOUT
+
+**1. Wheel overlay z-index vs market modal**
+The market modal (z-index 60) renders in front of the wheel overlay (z-index 50).
+A non-spinning player can open the market while another player is spinning,
+resulting in the wheel and market showing at the same time. Consider either
+(a) blocking the market dock button during wheelSpin phase, or (b) raising
+the wheel overlay to z-index 70 so it stays on top of all modals.
+
+**2. Close dock popups when opening a modal**
+Events and Influence popover panels are not closed when the market or portfolio
+modal opens. Opening a modal while a panel is showing leaves both visible.
+Dismiss all dock popups before showing a new modal.
+
+**3. Market property card size**
+Buy buttons and property stats are hard to read at the current card width.
+Wider cards or a list-view toggle would improve scanning many properties at once.
+
+**4. Wheel segment label readability**
+Text on the bottom half of the spinning wheel renders upside-down (expected for
+a circular wheel but jarring). Consider icon-only labels for the bottom segments,
+or radial text that always points outward from the centre.
+
+**5. Influence hand size badge**
+Players have no quick way to see how many influence cards they're holding without
+opening the panel. Add a small badge (e.g. "2/3") on the dock influence button.
+
+---
+
+## GAME FLOW
+
+**6. Year-start overlay auto-advance for non-active player**
+The "Continue →" button only shows on the active player's overlay. The waiting
+player sees "Waiting for X to continue..." with no indication of when or how
+to proceed. A subtle pulsing animation or a smaller secondary button for the
+waiting player would reduce confusion.
+
+**7. Action counter prominence**
+The 2-dot action counter in the bottom strip is small. Consider making the dots
+larger, or adding a text label like "Action 1/2" above the End Turn button.
+
+**8. Bot turn speed**
+The bot's 1300 ms delay per action makes turns feel slow when 2+ bots are
+playing. 800 ms would feel more responsive while still giving the player time
+to read the action result toast.
+
+**9. Year-on-year net worth comparison in year-start summary**
+The Year Summary overlay shows each player's cash change but not their net worth
+delta vs last year. Adding "+ / − from last year" below net worth would make
+progression more legible.
+
+**10. "No properties yet" hint in sidebar**
+New players see the NPI card showing "$0/yr - Rent − Repayments" which is
+unhelpful before any property is owned. Replace with a simple hint:
+"Buy a property from the Market to start earning rent."
+
+---
+
+## OWNED PROPERTY DETAILS
+
+**11. Active reno / development countdown on portfolio cards**
+If a property is renovating or developing, its portfolio card doesn't show
+how many years remain. A small "🔨 1 yr left" chip would help planning.
+
+**12. Manager fee live vacancy preview**
+The manager slider shows the new vacancy % in real-time, but doesn't show
+a before-vs-after comparison (e.g. "12% → 7%"). This would make the value
+of spending on a manager much clearer.
+
+**13. Sell modal: shows breakdown but confirmation button text is generic**
+The sell confirmation modal could summarise the outcome in one line:
+"You'll net +$X,XXX after paying off the loan" in bold before the confirm button.
+
+---
+
+## GAME-OVER / END STATE
+
+**14. Gameover screen not captured in scan**
+The gameover screen was not reached during this scan session. Recommend a
+dedicated test to verify: final rankings are correct, winner is highlighted,
+net worth is displayed for all players, and a "Play Again" / "Back to Lobby"
+button is present and functional.
+
+**15. 10-year recap**
+Consider a brief highlight reel at gameover: "biggest single year gain",
+"most properties owned at once", "total rent earned" per player — small
+stats that make the ending feel rewarding.
+
+---
+
+## MINOR / POLISH
+
+**16. Year header badge pulse**
+The "Year X" badge in the top bar could pulse once when the year increments
+to draw attention to the year change.
+
+**17. Vacancy % badge colours — tooltip**
+Low vacancy (≤5%) shows green, medium (≤15%) shows amber, high (>15%) shows red.
+Consider adding a tooltip on hover explaining what each colour means for new players.
+
+**18. Influence card "Play" confirmation**
+Playing an influence card is irreversible. A quick 1-click confirm (target
+selector + confirm button) would prevent accidental plays, especially for
+"opponent-property" type cards that require correct targeting.
+
+**19. Market sort: label "Risk" → "Risk ↑" for clarity**
+The sort button currently reads "Risk" which is ambiguous about sort direction.
+Matching the style of "Price ↑" / "Price ↓" would be consistent.
+
+**20. Player colour consistency on map pins**
+Each player's avatar on the map could use their distinct colour (matching their
+player card at the bottom) so it's instantly clear whose properties are which.
