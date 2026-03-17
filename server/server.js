@@ -11,7 +11,8 @@ const http     = require('http');
 const { Server } = require('socket.io');
 const path     = require('path');
 
-const engine = require('./game-engine');
+const engine    = require('./game-engine');
+const analytics = require('./analytics');
 
 const app    = express();
 const server = http.createServer(app);
@@ -27,6 +28,9 @@ app.use('/assets', express.static(path.join(__dirname, '..', 'assets')));
 // rooms: Map<roomId, { G, playerSlots: [socketId|null, ...], hostSocket }>
 const rooms = new Map();
 
+// ── Analytics API routes (after rooms is defined) ─────────────
+analytics.registerRoutes(app, rooms);
+
 function generateRoomId() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
@@ -35,6 +39,18 @@ function generateRoomId() {
 function broadcastState(roomId) {
   const room = rooms.get(roomId);
   if (!room) return;
+
+  // Analytics: year-end snapshot detection
+  if (room.G && room.G.phase === 'wheelSpin' && room._lastSnapshotYear !== room.G.year) {
+    analytics.takeYearSnapshot(room, room.G);
+    room._lastSnapshotYear = room.G.year;
+  }
+  // Analytics: gameover log writing
+  if (room.G && room.G.phase === 'gameover' && !room._logWritten) {
+    room._logWritten = true;
+    analytics.writeGameLog(room, roomId);
+  }
+
   const publicState = engine.getPublicState(room.G);
   io.to(roomId).emit('game-state', publicState);
 }
@@ -115,6 +131,12 @@ function runBotTurn(roomId) {
   switch (G.phase) {
     case 'wheelSpin': {
       const result = engine.spinWheel(G, botIdx);
+      analytics.logWheelSpin(room, {
+        year: G.year, spinnerIdx: botIdx, spinnerName: G.players[botIdx].name,
+        isBot: true, category: result.category,
+        cardTitle: result.card.title, cardEffect: result.card.effect,
+        timestamp: new Date().toISOString(),
+      });
       io.to(roomId).emit('wheel-result', { category: result.category, card: result.card, spinnerIdx: botIdx });
       broadcastState(roomId);
       broadcastAllPrivateStates(roomId);
@@ -160,11 +182,26 @@ function runBotTurn(roomId) {
         }).sort((a, b) => a.price - b.price);
         if (affordable.length > 0 && player.properties.length < 3) {
           const result = engine.actionBuy(G, botIdx, affordable[0]._lid);
-          if (result.ok) { broadcastActionResult(roomId, result); acted = true; }
+          if (result.ok) {
+            broadcastActionResult(roomId, result);
+            const bought = player.properties[player.properties.length - 1];
+            analytics.logAction(room, {
+              year: G.year, slot: G.yearSlot, playerIdx: botIdx,
+              playerName: player.name, isBot: true, action: 'buy',
+              details: bought ? { property: bought.city, rarity: bought.rarity, price: bought.purchasePrice, deposit: bought.depositPaid, loanAmount: bought.debt } : {},
+              timestamp: new Date().toISOString(),
+            });
+            acted = true;
+          }
         }
       }
       // Bot ends slot if it couldn't act or has used both actions
       if (!acted || G.actionsUsedThisSlot >= botMaxActions) {
+        analytics.logAction(room, {
+          year: G.year, slot: G.yearSlot, playerIdx: botIdx,
+          playerName: player.name, isBot: true, action: 'endSlot',
+          details: {}, timestamp: new Date().toISOString(),
+        });
         engine.endActionSlot(G);
       } else {
         // Acted but still has a second action — schedule another bot turn
@@ -289,6 +326,14 @@ io.on('connection', (socket) => {
     room.G       = engine.initGame(room.playerNames, room.botSlots, room.playerAvatars, room.gameConfig);
     room.started = true;
 
+    // Analytics: init logging arrays
+    room.actionLog        = [];
+    room.wheelSpins       = [];
+    room.yearSnapshots    = [];
+    room.gameStartedAt    = new Date().toISOString();
+    room._lastSnapshotYear = 1;
+    room._logWritten       = false;
+
     broadcastState(roomId);
     broadcastAllPrivateStates(roomId);
     maybeTriggerBot(roomId);
@@ -320,6 +365,15 @@ io.on('connection', (socket) => {
     if (G.wheelSpun) return emitError(socket, 'Wheel already spun this year.');
 
     const result = engine.spinWheel(G, playerIdx);
+
+    // Analytics: log wheel spin
+    analytics.logWheelSpin(room, {
+      year: G.year, spinnerIdx: playerIdx, spinnerName: G.players[playerIdx].name,
+      isBot: false, category: result.category,
+      cardTitle: result.card.title, cardEffect: result.card.effect,
+      timestamp: new Date().toISOString(),
+    });
+
     io.to(roomId).emit('wheel-result', {
       category:   result.category,
       card:       result.card,
@@ -361,6 +415,15 @@ io.on('connection', (socket) => {
     const result = engine.playInfluenceCard(room.G, playerIdx, handId, targetPlayerIdx, targetOwnedId);
     if (!result.ok) return emitError(socket, result.reason);
 
+    // Analytics: log influence card play
+    analytics.logAction(room, {
+      year: room.G.year, slot: room.G.yearSlot,
+      playerIdx, playerName: room.G.players[playerIdx].name, isBot: false,
+      action: 'playInfluence',
+      details: { cardTitle: result.card?.title, targetPlayerIdx, targetOwnedId },
+      timestamp: new Date().toISOString(),
+    });
+
     // Notify targeted player(s) with a dedicated alert
     if (result.targetPlayerIdx !== null && result.targetPlayerIdx !== undefined) {
       const targetSocketId = room.playerSlots[result.targetPlayerIdx];
@@ -399,6 +462,13 @@ io.on('connection', (socket) => {
 
     let result = { ok: true };
 
+    // Analytics: pre-action snapshot for sell (property gets removed)
+    let sellSnapshot = null;
+    if (payload.action === 'sell') {
+      const prop = G.players[playerIdx]?.properties?.find(p => p._ownedId === payload.oid);
+      if (prop) sellSnapshot = { city: prop.city, rarity: prop.rarity, value: prop.currentValue, debt: prop.debt };
+    }
+
     switch (payload.action) {
       case 'buy':
         result = engine.actionBuy(G, playerIdx, payload.lid);
@@ -430,6 +500,43 @@ io.on('connection', (socket) => {
     }
 
     if (!result.ok) return emitError(socket, result.reason);
+
+    // Analytics: log successful action
+    {
+      const player = G.players[playerIdx];
+      let details = {};
+      switch (payload.action) {
+        case 'buy': {
+          const bought = player?.properties?.[player.properties.length - 1];
+          if (bought) details = { property: bought.city, rarity: bought.rarity, price: bought.purchasePrice, deposit: bought.depositPaid, loanAmount: bought.debt };
+          break;
+        }
+        case 'sell':
+          if (sellSnapshot) details = { property: sellSnapshot.city, rarity: sellSnapshot.rarity, salePrice: sellSnapshot.value, equity: sellSnapshot.value - sellSnapshot.debt };
+          break;
+        case 'renovate': case 'develop': {
+          const prop = player?.properties?.find(p => p._ownedId === payload.oid);
+          details = { property: prop?.city, rarity: prop?.rarity };
+          break;
+        }
+        case 'reduceDebt': case 'releaseEquity': {
+          const prop = player?.properties?.find(p => p._ownedId === payload.oid);
+          details = { property: prop?.city, amount: parseInt(payload.amount) || 0 };
+          break;
+        }
+        case 'setManager': {
+          const prop = player?.properties?.find(p => p._ownedId === payload.oid);
+          details = { property: prop?.city, fee: parseInt(payload.fee) || 0 };
+          break;
+        }
+      }
+      analytics.logAction(room, {
+        year: G.year, slot: G.yearSlot,
+        playerIdx, playerName: player?.name, isBot: !!player?.isBot,
+        action: payload.action, details,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     // End slot only when both actions are spent (AABB — 2 actions per player per turn)
     const SLOT_CONSUMING = ['buy', 'reduceDebt', 'renovate', 'sell', 'releaseEquity', 'develop'];
