@@ -85,6 +85,7 @@ function getBotActingIdx(G) {
     case 'wheelSpin':
       return (!G.wheelSpun && G.players[G.firstThisYear]?.isBot) ? G.firstThisYear : null;
     case 'yearstart':
+    case 'midyear':
     case 'handoff':
     case 'action':
       return G.players[G.currentPlayerIdx]?.isBot ? G.currentPlayerIdx : null;
@@ -131,6 +132,11 @@ function runBotTurn(roomId) {
       G.phase = 'handoff';
       broadcastState(roomId);
       break;
+    case 'midyear':
+      engine.dismissMidyear(G);
+      broadcastState(roomId);
+      broadcastAllPrivateStates(roomId);
+      break;
     case 'handoff': {
       G.phase = 'action';
       const renoResults = engine.checkPendingRenovations(G, botIdx);
@@ -144,7 +150,8 @@ function runBotTurn(roomId) {
     case 'action': {
       const player = G.players[botIdx];
       let acted = false;
-      if (!player.blocked && G.actionsUsedThisSlot < 2) {
+      const botMaxActions = G.cfg ? G.cfg.actionsPerSlot : 2;
+      if (!player.blocked && G.actionsUsedThisSlot < botMaxActions) {
         const allMarket = [...G.market.metro, ...G.market.regional];
         const affordable = allMarket.filter(p => {
           const dep = p.price * (G.activeRestrictions.depositRate || 0.20);
@@ -157,7 +164,7 @@ function runBotTurn(roomId) {
         }
       }
       // Bot ends slot if it couldn't act or has used both actions
-      if (!acted || G.actionsUsedThisSlot >= 2) {
+      if (!acted || G.actionsUsedThisSlot >= botMaxActions) {
         engine.endActionSlot(G);
       } else {
         // Acted but still has a second action — schedule another bot turn
@@ -183,7 +190,7 @@ io.on('connection', (socket) => {
 
   // ── create-room ──────────────────────────────────────────
   // Payload: { playerName: string, maxPlayers: number (2-4) }
-  socket.on('create-room', ({ playerName, maxPlayers }) => {
+  socket.on('create-room', ({ playerName, maxPlayers, gameConfig }) => {
     maxPlayers = Math.min(4, Math.max(2, parseInt(maxPlayers) || 2));
     const roomId = generateRoomId();
     const playerSlots = Array(maxPlayers).fill(null);
@@ -193,6 +200,7 @@ io.on('connection', (socket) => {
       G: null,            // not initialised until game starts
       playerSlots,
       maxPlayers,
+      gameConfig: gameConfig || null,  // v1.4.0: null = Standard, object = Custom
       playerNames:   [playerName, ...Array(maxPlayers - 1).fill(null)],
       botSlots:      Array(maxPlayers).fill(false),
       playerAvatars: Array(maxPlayers).fill(null).map((_, i) => i + 1),
@@ -205,7 +213,7 @@ io.on('connection', (socket) => {
     socket.data.roomId    = roomId;
     socket.data.playerIdx = 0;
 
-    socket.emit('room-created', { roomId, playerIdx: 0, maxPlayers });
+    socket.emit('room-created', { roomId, playerIdx: 0, maxPlayers, gameConfig: gameConfig || null });
     console.log(`Room ${roomId} created by ${playerName} (max ${maxPlayers} players)`);
   });
 
@@ -278,7 +286,7 @@ io.on('connection', (socket) => {
     if (room.playerSlots.some(s => s === null)) return emitError(socket, 'Waiting for all players to join.');
     if (room.started) return emitError(socket, 'Game already started.');
 
-    room.G       = engine.initGame(room.playerNames, room.botSlots, room.playerAvatars);
+    room.G       = engine.initGame(room.playerNames, room.botSlots, room.playerAvatars, room.gameConfig);
     room.started = true;
 
     broadcastState(roomId);
@@ -425,7 +433,8 @@ io.on('connection', (socket) => {
 
     // End slot only when both actions are spent (AABB — 2 actions per player per turn)
     const SLOT_CONSUMING = ['buy', 'reduceDebt', 'renovate', 'sell', 'releaseEquity', 'develop'];
-    if (SLOT_CONSUMING.includes(payload.action) && G.phase !== 'gameover' && G.actionsUsedThisSlot >= 2) {
+    const maxActions = G.cfg ? G.cfg.actionsPerSlot : 2;
+    if (SLOT_CONSUMING.includes(payload.action) && G.phase !== 'gameover' && G.actionsUsedThisSlot >= maxActions) {
       engine.endActionSlot(G);
     }
 
@@ -448,6 +457,24 @@ io.on('connection', (socket) => {
 
     G.phase = 'handoff';
     broadcastState(roomId);
+    maybeTriggerBot(roomId);
+  });
+
+  // ── dismiss-midyear ─────────────────────────────────────
+  // v1.4.0: Player dismisses mid-year summary card
+  socket.on('dismiss-midyear', () => {
+    const roomId    = socket.data.roomId;
+    const playerIdx = socket.data.playerIdx;
+    const room      = rooms.get(roomId);
+    if (!room || !room.G) return;
+
+    const G = room.G;
+    if (G.phase !== 'midyear') return;
+    if (playerIdx !== G.currentPlayerIdx) return;
+
+    engine.dismissMidyear(G);
+    broadcastState(roomId);
+    broadcastAllPrivateStates(roomId);
     maybeTriggerBot(roomId);
   });
 

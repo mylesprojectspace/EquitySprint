@@ -202,7 +202,7 @@ function hideOverlay(id) {
   document.getElementById(id).classList.add('hidden');
 }
 function hideAllOverlays() {
-  ['overlay-wheel','overlay-yearstart','overlay-handoff','overlay-auction','overlay-gameover','overlay-reno','overlay-dev']
+  ['overlay-wheel','overlay-yearstart','overlay-midyear','overlay-handoff','overlay-auction','overlay-gameover','overlay-reno','overlay-dev']
     .forEach(id => hideOverlay(id));
 }
 
@@ -232,12 +232,17 @@ function initSocket() {
     }
   });
 
-  socket.on('room-created', ({ roomId, playerIdx, maxPlayers }) => {
+  socket.on('room-created', ({ roomId, playerIdx, maxPlayers, gameConfig }) => {
     myRoomId     = roomId;
     myPlayerIdx  = playerIdx;
     isHost       = true;
     clientPhase  = 'waiting';
     document.getElementById('room-code-value').textContent = roomId;
+    // Show "Custom Game" badge if custom config is active
+    const waitWrap = document.querySelector('.waiting-wrap h2');
+    if (gameConfig && waitWrap) {
+      waitWrap.innerHTML = 'Waiting for Players <span class="custom-badge">Custom Game</span>';
+    }
     showScreen('screen-waiting');
     renderPlayerSlots([{ name: document.getElementById('create-name').value.trim(), connected: true, avatarIdx: 1 }], maxPlayers);
     updateWaitingStatus(1, maxPlayers);
@@ -398,11 +403,89 @@ function initLobby() {
     document.getElementById('form-create').classList.add('hidden');
   });
 
+  // v1.4.0: Game mode toggle (Standard / Custom)
+  let gameMode = 'standard';
+  document.getElementById('mode-standard').addEventListener('click', () => {
+    gameMode = 'standard';
+    document.getElementById('mode-standard').classList.add('active');
+    document.getElementById('mode-custom').classList.remove('active');
+    document.getElementById('custom-settings').classList.add('hidden');
+  });
+  document.getElementById('mode-custom').addEventListener('click', () => {
+    gameMode = 'custom';
+    document.getElementById('mode-custom').classList.add('active');
+    document.getElementById('mode-standard').classList.remove('active');
+    document.getElementById('custom-settings').classList.remove('hidden');
+  });
+
+  // Custom settings slider value display
+  const cfgSliders = {
+    'cfg-cash':    { display: 'val-cash',    fmt: v => '$' + Number(v).toLocaleString() },
+    'cfg-salary':  { display: 'val-salary',  fmt: v => '$' + Number(v).toLocaleString() },
+    'cfg-win':     { display: 'val-win',     fmt: v => '$' + Number(v).toLocaleString() },
+    'cfg-years':   { display: 'val-years',   fmt: v => v + ' yrs' },
+    'cfg-actions': { display: 'val-actions', fmt: v => v },
+    'cfg-rate':    { display: 'val-rate',    fmt: v => v + '%' },
+    'cfg-deposit': { display: 'val-deposit', fmt: v => v + '%' },
+    'cfg-market':  { display: 'val-market',  fmt: v => v },
+  };
+  Object.entries(cfgSliders).forEach(([id, info]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => {
+      document.getElementById(info.display).textContent = info.fmt(el.value);
+    });
+  });
+
+  // Reno power preset description
+  const RENO_DESCS = {
+    classic:  'Pre-1.4.0 behaviour. High-ROI renovations.',
+    balanced: 'v1.4.0 standard. Renovations are good, not dominant.',
+    weak:     'Experimental. Renovations are a minor boost.',
+  };
+  document.getElementById('cfg-reno').addEventListener('change', function() {
+    document.getElementById('reno-desc').textContent = RENO_DESCS[this.value] || '';
+  });
+
+  function buildGameConfig() {
+    if (gameMode === 'standard') return null;
+    const renoPreset = document.getElementById('cfg-reno').value;
+    const cfg = {
+      startingCash:     parseInt(document.getElementById('cfg-cash').value),
+      startingSalary:   parseInt(document.getElementById('cfg-salary').value),
+      winTarget:        parseInt(document.getElementById('cfg-win').value),
+      maxYears:         parseInt(document.getElementById('cfg-years').value),
+      actionsPerSlot:   parseInt(document.getElementById('cfg-actions').value),
+      baseInterestRate: parseFloat(document.getElementById('cfg-rate').value) / 100,
+      baseDepositRate:  parseInt(document.getElementById('cfg-deposit').value) / 100,
+      marketSize:       parseInt(document.getElementById('cfg-market').value),
+      maxProperties:    parseInt(document.getElementById('cfg-maxprops').value),
+      rarityGuarantees: document.getElementById('cfg-rarity').value === '1',
+      equityDepositOffset: document.getElementById('cfg-equity').value === '1' ? 0.50 : 0,
+      renoCooldown:     document.getElementById('cfg-cooldown').value === '1',
+      extendedEventDeck: document.getElementById('cfg-events').value === '1',
+      wheelEvents:      document.getElementById('cfg-wheel').value === '1',
+      influenceCards:   document.getElementById('cfg-influence').value === '1',
+    };
+    // Reno power presets
+    if (renoPreset === 'classic') {
+      cfg.renoValueMult = 1.0;
+      cfg.renoCostByRarity = { standard: 0.08, premium: 0.08, rare: 0.08, legendary: 0.08 };
+    } else if (renoPreset === 'weak') {
+      cfg.renoValueMult = 0.30;
+      cfg.renoCostByRarity = { standard: 0.08, premium: 0.10, rare: 0.12, legendary: 0.15 };
+    } else {
+      cfg.renoValueMult = 0.50;
+      cfg.renoCostByRarity = { standard: 0.08, premium: 0.10, rare: 0.12, legendary: 0.15 };
+    }
+    return cfg;
+  }
+
   document.getElementById('btn-create-room').addEventListener('click', () => {
     const name = document.getElementById('create-name').value.trim();
     const max  = parseInt(document.getElementById('create-max').value);
     if (!name) { showLobbyError('Enter your name.'); return; }
-    socket.emit('create-room', { playerName: name, maxPlayers: max });
+    const gameConfig = buildGameConfig();
+    socket.emit('create-room', { playerName: name, maxPlayers: max, gameConfig });
   });
 
   document.getElementById('btn-join-room').addEventListener('click', () => {
@@ -547,7 +630,8 @@ function renderTurnBanner() {
     const isMyTurn = G.currentPlayerIdx === myPlayerIdx;
     const activePlayer = G.players[G.currentPlayerIdx];
     const used = G.actionsUsedThisSlot || 0;
-    const left = Math.max(0, 2 - used);
+    const cfgActions = (G.cfg && G.cfg.actionsPerSlot) || 2;
+    const left = Math.max(0, cfgActions - used);
 
     if (isMyTurn) {
       banner.className = left === 0 ? 'my-turn turn-done' : 'my-turn';
@@ -562,9 +646,11 @@ function renderTurnBanner() {
     const spinner = G.players[G.firstThisYear];
     banner.className = 'their-turn';
     banner.innerHTML = `🎡 ${escHtml(spinner?.name || '?')} is spinning the wheel…`;
-  } else if (G.phase === 'yearstart' || G.phase === 'handoff') {
+  } else if (G.phase === 'yearstart' || G.phase === 'handoff' || G.phase === 'midyear') {
     banner.className = 'their-turn';
-    banner.innerHTML = `📅 Year ${G.year} — Getting ready…`;
+    banner.innerHTML = G.phase === 'midyear'
+      ? `📊 Mid-Year ${G.year} — H2 income received`
+      : `📅 Year ${G.year} — Getting ready…`;
   } else {
     banner.className = 'hidden';
     banner.innerHTML = '';
@@ -736,12 +822,18 @@ function buildPortfolioHtml(p) {
     if (isMyTurn) {
       const oid = prop._ownedId;
       if (!isReno && !prop.renovated) {
-        // QoL item 5: show estimated reno cost inline (p is buildPortfolioHtml's parameter)
-        const baseCost = Math.round(prop.currentValue * 0.08);
-        const renoCostDisplay = p.freeRenoNextRound ? 'FREE'
+        // v1.4.0: Rarity-scaled reno cost display + cooldown check
+        const RENO_RATES = { standard: 0.08, premium: 0.10, rare: 0.12, legendary: 0.15 };
+        const renoCfg = (G && G.cfg && G.cfg.renoCostByRarity) || RENO_RATES;
+        const costRate = renoCfg[prop.rarity] || renoCfg.standard || 0.08;
+        const baseCost = Math.round(prop.currentValue * costRate);
+        const cooldownActive = (G && G.cfg ? G.cfg.renoCooldown : true) && prop._purchaseYear && G.year <= prop._purchaseYear;
+        const renoCostDisplay = cooldownActive ? 'Yr ' + (prop._purchaseYear + 1)
+          : p.freeRenoNextRound ? 'FREE'
           : p.renoDiscountNextRound ? fmt(Math.round(baseCost * 0.5))
           : fmt(baseCost);
-        actions += `<button class="btn-secondary" data-action="renovate" data-oid="${oid}" title="Cost: ${renoCostDisplay}">🔨 Reno <span class="reno-cost-hint">${renoCostDisplay}</span></button>`;
+        const renoDisabled = cooldownActive ? ' disabled title="Purchased this year"' : '';
+        actions += `<button class="btn-secondary" data-action="renovate" data-oid="${oid}" title="Cost: ${renoCostDisplay}"${renoDisabled}>🔨 Reno <span class="reno-cost-hint">${renoCostDisplay}</span></button>`;
       }
       if (prop.market === 'regional' && !prop.developed && !isDev) {
         const devCost = Math.round(prop.currentValue * 0.15);
@@ -791,21 +883,27 @@ function buildPortfolioBarChart(p) {
   const bars = p.properties.map(pr => {
     const pct = Math.round((pr.currentValue / maxVal) * 100);
     const color = pr._renovating ? 'var(--gold)' : pr.developed ? 'var(--mint)' : 'var(--blue)';
+    // v1.4.0: Show accessible equity per property
+    const accessibleEquity = Math.max(0, Math.floor(pr.currentValue * 0.80) - pr.debt);
+    const eqPct = Math.round((accessibleEquity / maxVal) * 100);
     return `<div class="bar-row">
       <div class="bar-name">${escHtml(cityName(pr.city))}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
-      <div class="bar-val">${fmt(pr.currentValue)}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${pct}%;background:${color}"></div>
+        <div class="bar-fill equity-bar" style="width:${eqPct}%;background:var(--mint);opacity:0.45;"></div>
+      </div>
+      <div class="bar-val">${fmt(pr.currentValue)}<br><span class="bar-equity">${fmt(accessibleEquity)}</span></div>
     </div>`;
   }).join('');
   return `<div class="bar-chart-section sketch">
-    <div class="trends-title">Portfolio</div>
+    <div class="trends-title">Portfolio <span style="font-size:.65rem;color:var(--mint);font-weight:600;">● Accessible Equity</span></div>
     ${bars}
   </div>`;
 }
 
 // ── Win Target Progress (QoL item 6) ───────────────────────
 function buildWinProgress(p) {
-  const WIN_TARGET = 1000000;
+  const WIN_TARGET = (G && G.cfg) ? G.cfg.winTarget : 1000000;
   const nw  = p.netWorth || 0;
   const pct = Math.min(100, Math.max(0, Math.round((nw / WIN_TARGET) * 100)));
   const fillClass = pct >= 100 ? 'gold' : nw < 0 ? 'red' : 'blue';
@@ -1991,8 +2089,9 @@ function renderBottomStrip() {
   let actionPanelHtml = '';
   if (isActionPhase) {
     const used = G.actionsUsedThisSlot || 0;
-    const left = Math.max(0, 2 - used);
-    const dotsHtml = [0,1].map(i =>
+    const maxActs = (G.cfg && G.cfg.actionsPerSlot) || 2;
+    const left = Math.max(0, maxActs - used);
+    const dotsHtml = Array.from({length: maxActs}, (_, i) =>
       `<span class="action-dot${i < used ? ' used' : ' free'}"></span>`
     ).join('');
     const statusMsg = left === 0
@@ -2261,10 +2360,16 @@ let renoPendingOid = null;
 
 function openRenoConfirmModal(prop, p, oid) {
   renoPendingOid = oid;
-  const baseCost = Math.round(prop.currentValue * 0.08);
+  // v1.4.0: Rarity-scaled reno cost
+  const RENO_RATES = { standard: 0.08, premium: 0.10, rare: 0.12, legendary: 0.15 };
+  const renoCfg = (G && G.cfg && G.cfg.renoCostByRarity) || RENO_RATES;
+  const costRate = renoCfg[prop.rarity] || renoCfg.standard || 0.08;
+  const baseCost = Math.round(prop.currentValue * costRate);
   const cost = p.freeRenoNextRound ? 0 : (p.renoDiscountNextRound ? Math.round(baseCost * 0.5) : baseCost);
   const isFree = cost === 0;
   const upside = prop.renoUpside || 0.20;
+  const renoValMult = (G && G.cfg) ? G.cfg.renoValueMult : 0.50;
+  const valueUpside = Math.round(upside * renoValMult * 100);
 
   document.getElementById('reno-confirm-title').textContent = 'Renovate Property';
   document.getElementById('reno-confirm-city').textContent = prop.city + ' · ' + (prop.propType || '');
@@ -2280,7 +2385,7 @@ function openRenoConfirmModal(prop, p, oid) {
       </div>
       <div class="reno-stat">
         <div class="reno-stat-label">Value Boost</div>
-        <div class="reno-stat-value pos">+${Math.round(upside * 100)}%</div>
+        <div class="reno-stat-value pos">+${valueUpside}%</div>
       </div>
       <div class="reno-stat">
         <div class="reno-stat-label">Duration</div>
@@ -2289,7 +2394,7 @@ function openRenoConfirmModal(prop, p, oid) {
     </div>
   `;
   document.getElementById('reno-confirm-desc').textContent =
-    'Renovation locks the property for 1–2 years but significantly boosts rent and value on completion.';
+    'Renovation locks the property for 1–2 years. Collects 1/4 rent during construction. Value boost is lower than rent boost.';
   document.getElementById('modal-reno-confirm').classList.remove('hidden');
 }
 
@@ -2430,7 +2535,7 @@ function openInfluenceModal(card) {
 // ── Phase Overlays ─────────────────────────────────────────
 function renderPhaseOverlays() {
   if (pendingRenoResults) {
-    ['overlay-wheel','overlay-yearstart','overlay-handoff','overlay-auction','overlay-gameover']
+    ['overlay-wheel','overlay-yearstart','overlay-midyear','overlay-handoff','overlay-auction','overlay-gameover']
       .forEach(id => hideOverlay(id));
     return;
   }
@@ -2438,6 +2543,7 @@ function renderPhaseOverlays() {
   switch (G.phase) {
     case 'wheelSpin': renderWheelOverlay();    break;
     case 'yearstart': renderYearStartOverlay(); break;
+    case 'midyear':   renderMidyearOverlay();   break;
     case 'handoff':   renderHandoffOverlay();   break;
     case 'auction':   renderAuctionOverlay();   break;
     case 'gameover':  renderGameoverOverlay();  break;
@@ -2509,9 +2615,10 @@ function renderWheelResult(category, card, spinnerIdx) {
 
 // ── Year Start Overlay ─────────────────────────────────────
 function renderYearStartOverlay() {
-  const isFinalYear = G.year >= 10;
+  const maxYears = (G.cfg && G.cfg.maxYears) || 10;
+  const isFinalYear = G.year >= maxYears;
   document.getElementById('ys-title').textContent = isFinalYear ? `⚡ Year ${G.year} — FINAL TURN!` : `Year ${G.year} — Summary`;
-  const yrsLeft = 10 - G.year;
+  const yrsLeft = maxYears - G.year;
   document.getElementById('ys-subtitle').textContent =
     isFinalYear ? 'Last chance to act — highest net worth wins!' :
     yrsLeft > 0 ? `${yrsLeft} year${yrsLeft !== 1 ? 's' : ''} remaining` : '';
@@ -2573,6 +2680,37 @@ function renderYearStartOverlay() {
   showOverlay('overlay-yearstart');
 }
 
+// ── Midyear Overlay (v1.4.0) ──────────────────────────────
+function renderMidyearOverlay() {
+  const isMe = G.currentPlayerIdx === myPlayerIdx;
+  document.getElementById('my-title').textContent = `Mid-Year ${G.year}`;
+  document.getElementById('my-subtitle').textContent = 'H2 income received — second half of the year';
+
+  const me = G.players[myPlayerIdx];
+  const recap = me?._yearRecap;
+  const grid = document.getElementById('my-recap-grid');
+  if (recap) {
+    grid.innerHTML = `
+      <div class="recap-item"><span class="recap-label">Rent Collected</span><span class="recap-val">${fmt(recap.rentCollected)}</span></div>
+      <div class="recap-item"><span class="recap-label">Net Savings</span><span class="recap-val">${fmt(recap.netSavings)}</span></div>
+      <div class="recap-item"><span class="recap-label">Interest Paid</span><span class="recap-val">${fmt(recap.interestPaid)}</span></div>
+      <div class="recap-item"><span class="recap-label">Net Worth</span><span class="recap-val" style="font-weight:900;">${fmt(me.netWorth)}</span></div>
+    `;
+  }
+
+  const btn = document.getElementById('btn-dismiss-midyear');
+  const waiting = document.getElementById('my-waiting');
+  if (isMe) {
+    btn.classList.remove('hidden');
+    waiting.textContent = '';
+  } else {
+    btn.classList.add('hidden');
+    waiting.textContent = `Waiting for ${G.players[G.currentPlayerIdx]?.name || 'player'}…`;
+  }
+
+  showOverlay('overlay-midyear');
+}
+
 // ── Handoff Overlay ────────────────────────────────────────
 function renderHandoffOverlay() {
   const current   = G.players[G.currentPlayerIdx];
@@ -2580,7 +2718,7 @@ function renderHandoffOverlay() {
   const actionNum = G.players.length > 0 ? Math.floor(G.yearSlot / G.players.length) + 1 : 1;
 
   document.getElementById('handoff-player-name').textContent = current ? current.name : '?';
-  document.getElementById('handoff-slot-info').textContent   = `Action ${actionNum} of 2 · Year ${G.year}`;
+  document.getElementById('handoff-slot-info').textContent   = `Turn ${actionNum} of 2 · Year ${G.year}`;
 
   const btn     = document.getElementById('btn-dismiss-handoff');
   const waiting = document.getElementById('handoff-waiting');
@@ -2769,6 +2907,11 @@ function initGameButtons() {
   // Year start
   document.getElementById('btn-dismiss-ys').addEventListener('click', () => {
     socket.emit('dismiss-year-start');
+  });
+
+  // Midyear (v1.4.0)
+  document.getElementById('btn-dismiss-midyear').addEventListener('click', () => {
+    socket.emit('dismiss-midyear');
   });
 
   // Handoff

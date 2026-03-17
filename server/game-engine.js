@@ -26,13 +26,17 @@ const BASE_INCOME_MULT      = 0.70;
 const BASE_DEPOSIT_RATE     = 0.20;
 const BASE_STRESS_BUFFER    = 0.02;
 const LIVING_EXPENSE_RATE   = 0.60;
-const RENO_COST_MULT        = 0.08;
+const RENO_COST_MULT        = 0.08;   // legacy flat rate (used by Classic preset)
+const RENO_VALUE_MULT       = 0.50;   // v1.4.0: value uplift = 50% of rent uplift
+const RENO_COST_BY_RARITY   = { standard: 0.08, premium: 0.10, rare: 0.12, legendary: 0.15 };
+const EQUITY_DEPOSIT_OFFSET = 0.50;   // v1.4.0: 50% of accessible equity offsets deposit
+const MIN_DEPOSIT_RATE      = 0.10;   // v1.4.0: hard floor even with equity offset
 const RENO_VARIANCE         = { low: 0.15, medium: 0.30, high: 0.50 };
 const DEVELOP_COST_MULT     = 0.15;
 const DEVELOP_SUCCESS       = 0.60;
 const DEBT_REDUCE_MIN       = 10000;
-const STARTING_CASH         = 60000;
-const STARTING_SALARY       = 80000;
+const STARTING_CASH         = 80000;
+const STARTING_SALARY       = 95000;
 const MARKET_VARIATION      = 0.10;
 const METRO_MARKET_SIZE     = 4;
 const REGIONAL_MARKET_SIZE  = 5;
@@ -48,6 +52,34 @@ const MANAGER_FEE_MAX           = 10000;
 const MANAGER_VACANCY_MAX_REDUCTION = 0.10;
 
 const RISK_GROWTH_MULT = { low: 0.6, medium: 1.0, high: 1.5 };
+
+// ============================================================
+// v1.4.0: DEFAULT_CONFIG — all balance constants as configurable defaults
+// Standard mode = DEFAULT_CONFIG. Custom mode overrides specific values.
+// ============================================================
+
+const DEFAULT_CONFIG = {
+  startingCash:        80000,
+  startingSalary:      95000,
+  winTarget:           1000000,
+  maxYears:            10,
+  actionsPerSlot:      2,
+  baseInterestRate:    0.065,
+  baseDepositRate:     0.20,
+  renoValueMult:       0.50,
+  renoCostByRarity:    { standard: 0.08, premium: 0.10, rare: 0.12, legendary: 0.15 },
+  renoCooldown:        true,
+  equityDepositOffset: 0.50,
+  minDepositRate:      0.10,
+  rarityGuarantees:    true,
+  extendedEventDeck:   true,
+  wheelEvents:         true,
+  influenceCards:      true,
+  marketSize:          9,
+  maxProperties:       Infinity,
+  growthMultiplier:    'standard',
+  botDifficulty:       'standard',
+};
 
 // ============================================================
 // Utility
@@ -80,11 +112,11 @@ function effectiveGrowthRange(prop) {
 function createPlayer(name, id, avatarIdx = 1) {
   return {
     id, name, avatarIdx,
-    salary:            STARTING_SALARY,
-    cash:              STARTING_CASH,
+    salary:            STARTING_SALARY,   // overridden by cfg in initGame
+    cash:              STARTING_CASH,     // overridden by cfg in initGame
     properties:        [],
     totalDebt:         0,
-    interestRate:      BASE_INTEREST_RATE,
+    interestRate:      BASE_INTEREST_RATE, // overridden by cfg in initGame
     rentalIncome:      0,
     annualRepayments:  0,
     serviceability:    0,
@@ -104,9 +136,9 @@ function createPlayer(name, id, avatarIdx = 1) {
 // Fresh Restrictions
 // ============================================================
 
-function freshRestrictions() {
+function freshRestrictions(cfg) {
   return {
-    depositRate:          BASE_DEPOSIT_RATE,
+    depositRate:          (cfg && cfg.baseDepositRate) || BASE_DEPOSIT_RATE,
     incomeMultiplier:     BASE_INCOME_MULT,
     stressBuffer:         BASE_STRESS_BUFFER,
     regionalFreeze:       false,
@@ -120,7 +152,14 @@ function freshRestrictions() {
 // Game State Init
 // ============================================================
 
-function initGame(names, botSlots = [], avatarIdxs = []) {
+function initGame(names, botSlots = [], avatarIdxs = [], gameConfig = null) {
+  // Merge custom config over defaults (Standard mode = null = use defaults)
+  const cfg = gameConfig ? { ...DEFAULT_CONFIG, ...gameConfig } : { ...DEFAULT_CONFIG };
+  // Handle nested renoCostByRarity merge
+  if (gameConfig && gameConfig.renoCostByRarity) {
+    cfg.renoCostByRarity = { ...DEFAULT_CONFIG.renoCostByRarity, ...gameConfig.renoCostByRarity };
+  }
+
   const startingPlayer = Math.floor(Math.random() * names.length);
   const G = {
     year:              1,
@@ -129,16 +168,20 @@ function initGame(names, botSlots = [], avatarIdxs = []) {
     firstThisYear:     startingPlayer,
     phase:             'wheelSpin',     // game starts with a wheel spin before year 1
     actionsUsedThisSlot: 0,            // counts paid actions used in current turn (max 2)
+    cfg,                               // v1.4.0: merged game config
     players:           names.map((name, id) => {
       const p = createPlayer(name, id, avatarIdxs[id] || (id + 1));
       p.isBot = !!(botSlots[id]);
+      p.salary = cfg.startingSalary;
+      p.cash   = cfg.startingCash;
+      p.interestRate = cfg.baseInterestRate;
       return p;
     }),
     market:            { metro: [], regional: [] },
     wheelDeck:         buildWheelDeck(),
     activeMarketChange: null,           // replaces activeBankPolicy
     marketChangeYearsLeft: 0,
-    activeRestrictions: freshRestrictions(),
+    activeRestrictions: freshRestrictions(cfg),
     log:               [],
     pendingWheelResult: null,           // { category, card } — drawn, awaiting ack
     pendingAuction:    null,
@@ -323,7 +366,8 @@ function applyInfluenceEffect(G, card, playerIdx, targetPlayerIdx, targetOwnedId
       const renovating = target.properties.find(p => p._renovating);
       if (!renovating) return { ok: false, reason: 'Target has no renovation in progress.' };
       // Double the cost already paid; deduct extra from their cash
-      const extraCost = Math.round(renovating.currentValue * RENO_COST_MULT);
+      const extraCostRate = RENO_COST_BY_RARITY[renovating.rarity] ?? RENO_COST_BY_RARITY.standard;
+      const extraCost = Math.round(renovating.currentValue * extraCostRate);
       if (target.cash < extraCost) {
         // Partial — take what they have
         target.cash = 0;
@@ -465,10 +509,13 @@ function generateMarket(G) {
       standard:  available.filter(p => p.rarity === 'standard'),
     };
 
+    // v1.4.0: Year 7+ raises legendary roll threshold to 15%
+    const legendaryThreshold = yearFactor >= 7 ? 0.15 : 0.10;
+
     for (let i = 0; i < size; i++) {
       let chosen = null;
       const roll = Math.random();
-      if (!legendaryUsed && roll < 0.10 && byRarity.legendary.length) {
+      if (!legendaryUsed && roll < legendaryThreshold && byRarity.legendary.length) {
         chosen = byRarity.legendary.splice(Math.floor(Math.random() * byRarity.legendary.length), 1)[0];
         legendaryUsed = true;
       } else if (roll < 0.25 && byRarity.rare.length) {
@@ -490,6 +537,35 @@ function generateMarket(G) {
 
   G.market.metro    = pickWithRarity(metroBase, metroSize);
   G.market.regional = pickWithRarity(regionalBase, regionalSize);
+
+  // v1.4.0: Progressive rarity guarantees
+  const combined = [...G.market.metro, ...G.market.regional];
+  function ensureRarity(requiredRarity) {
+    if (combined.some(l => l.rarity === requiredRarity)) return;
+    // Find a source property of the required rarity
+    const source = allBase.filter(p => p.rarity === requiredRarity);
+    if (!source.length) return;
+    const pick = source[Math.floor(Math.random() * source.length)];
+    const listing = makeMarketListing(pick, yearFactor);
+    // Replace lowest-value standard listing
+    let lowestIdx = -1, lowestVal = Infinity, lowestIn = null;
+    G.market.metro.forEach((l, i) => { if (l.rarity === 'standard' && l.price < lowestVal) { lowestVal = l.price; lowestIdx = i; lowestIn = 'metro'; } });
+    G.market.regional.forEach((l, i) => { if (l.rarity === 'standard' && l.price < lowestVal) { lowestVal = l.price; lowestIdx = i; lowestIn = 'regional'; } });
+    if (lowestIdx >= 0 && lowestIn) {
+      G.market[lowestIn][lowestIdx] = listing;
+    } else {
+      // No standard to replace — just add it
+      if (pick.market === 'metro') G.market.metro.push(listing);
+      else G.market.regional.push(listing);
+    }
+  }
+
+  const guaranteesOn = G.cfg ? G.cfg.rarityGuarantees !== false : true;
+  if (guaranteesOn) {
+    if (yearFactor >= 3) ensureRarity('premium');
+    if (yearFactor >= 5) ensureRarity('rare');
+    if (yearFactor >= 7) ensureRarity('rare'); // rare always guaranteed at 7+
+  }
 
   // 80% chance: discounted deal property
   if (Math.random() < 0.80) {
@@ -526,7 +602,11 @@ function makeMarketListing(base, yearFactor) {
 // ============================================================
 
 function recalcPlayer(G, p) {
-  p.rentalIncome     = p.properties.reduce((s, pr) => s + (pr.vacantThisRound ? 0 : pr.currentRent), 0);
+  p.rentalIncome     = p.properties.reduce((s, pr) => {
+    if (pr.vacantThisRound) return s;
+    if (pr._renovating) return s + Math.round(pr.currentRent / 4); // v1.4.0: 1/4 rent during reno
+    return s + pr.currentRent;
+  }, 0);
   p.annualRepayments = p.properties.reduce((s, pr) => s + pr.debt * p.interestRate, 0);
   p.totalDebt        = p.properties.reduce((s, pr) => s + pr.debt, 0);
   const mult         = G.activeRestrictions.incomeMultiplier;
@@ -548,8 +628,18 @@ function canBuyProperty(G, player, prop, overridePrice) {
   const basePrice = overridePrice !== undefined ? overridePrice : prop.price;
   const inflation  = prop.market === 'metro' ? r.metroPriceInflation : 0;
   const price      = Math.round(basePrice * (1 + inflation));
-  const deposit    = Math.round(price * r.depositRate);
-  const loanAmount = price - deposit;
+  const baseDeposit = Math.round(price * r.depositRate);
+
+  // v1.4.0: Equity-based deposit offset (configurable)
+  const eqOffset = G.cfg ? G.cfg.equityDepositOffset : EQUITY_DEPOSIT_OFFSET;
+  const minDepRate = G.cfg ? G.cfg.minDepositRate : MIN_DEPOSIT_RATE;
+  const existingEquity = player.properties.reduce(
+    (s, pr) => s + Math.max(0, Math.floor(pr.currentValue * 0.80) - pr.debt), 0
+  );
+  const equityOffset = eqOffset > 0 ? Math.floor(existingEquity * eqOffset) : 0;
+  const minDeposit   = Math.round(price * minDepRate);
+  const deposit      = Math.max(minDeposit, baseDeposit - equityOffset);
+  const loanAmount   = price - deposit;
 
   if (player.cash < deposit)
     return { ok: false, reason: `Need $${fmt(deposit)} deposit — only have $${fmt(player.cash)}` };
@@ -582,7 +672,7 @@ function actionBuy(G, playerIdx, lid) {
     prop = [...G.market.metro, ...G.market.regional].find(p => p._lid === lid);
   }
   if (!prop) return { ok: false, reason: 'Property no longer available.' };
-  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
+  if (G.actionsUsedThisSlot >= maxActionsPerSlot(G)) return { ok: false, reason: 'No actions remaining this turn.' };
 
   const check = canBuyProperty(G, player, prop);
   if (!check.ok) return check;
@@ -622,6 +712,7 @@ function executeBuy(G, player, prop, check) {
     depositPaid:     check.deposit,
     extraSpent:      0,
     _ownedId:        ++G._ownedIdSeq,
+    _purchaseYear:   G.year,
   };
   player.cash -= check.deposit;
   player.properties.push(owned);
@@ -640,7 +731,7 @@ function actionReduceDebt(G, playerIdx, oid, amount) {
   if (!prop) return { ok: false, reason: 'Property not found.' };
   if (player.cash < amount) return { ok: false, reason: `Not enough cash — have $${fmt(player.cash)}` };
   if (amount > prop.debt) amount = prop.debt;
-  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
+  if (G.actionsUsedThisSlot >= maxActionsPerSlot(G)) return { ok: false, reason: 'No actions remaining this turn.' };
 
   player.cash -= amount;
   prop.debt   -= amount;
@@ -668,9 +759,16 @@ function actionRenovate(G, playerIdx, oid) {
   if (prop.renovated)   return { ok: false, reason: `${prop.city} has already been renovated.` };
   if (prop._renovating) return { ok: false, reason: `${prop.city} renovation already in progress.` };
   if (prop._developing) return { ok: false, reason: `${prop.city} is currently being developed. Wait for it to complete first.` };
-  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
+  // v1.4.0: Configurable reno cooldown
+  const renoCooldown = G.cfg ? G.cfg.renoCooldown : true;
+  if (renoCooldown && prop._purchaseYear && G.year <= prop._purchaseYear)
+    return { ok: false, reason: `${prop.city} was purchased this year — renovations available from Year ${prop._purchaseYear + 1}.` };
 
-  let cost = player.freeRenoNextRound ? 0 : Math.round(prop.currentValue * RENO_COST_MULT);
+  if (G.actionsUsedThisSlot >= maxActionsPerSlot(G)) return { ok: false, reason: 'No actions remaining this turn.' };
+
+  const renoCosts = G.cfg ? G.cfg.renoCostByRarity : RENO_COST_BY_RARITY;
+  const baseCostRate = renoCosts[prop.rarity] ?? renoCosts.standard;
+  let cost = player.freeRenoNextRound ? 0 : Math.round(prop.currentValue * baseCostRate);
   if (player.renoDiscountNextRound) cost = Math.round(cost * 0.5);
   if (player.cash < cost) return { ok: false, reason: `Renovation costs $${fmt(cost)} — only have $${fmt(player.cash)}.` };
 
@@ -711,8 +809,9 @@ function checkPendingRenovations(G, playerIdx) {
   readyProps.forEach(prop => {
     const variance   = RENO_VARIANCE[prop.risk] ?? 0.30;
     const actualMult = (1 - variance) + Math.random() * (variance * 2);
+    const renoValMult = G.cfg ? G.cfg.renoValueMult : RENO_VALUE_MULT;
     const rentBoost  = Math.round(prop.currentRent  * prop.renoUpside * actualMult);
-    const valueBoost = Math.round(prop.currentValue * prop.renoUpside * actualMult);
+    const valueBoost = Math.round(prop.currentValue * prop.renoUpside * renoValMult * actualMult);
 
     prop.currentRent  += rentBoost;
     prop.currentValue += valueBoost;
@@ -734,7 +833,7 @@ function actionSell(G, playerIdx, oid) {
   const player = G.players[playerIdx];
   if (playerIdx !== G.currentPlayerIdx) return { ok: false, reason: 'Not your turn.' };
 
-  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
+  if (G.actionsUsedThisSlot >= maxActionsPerSlot(G)) return { ok: false, reason: 'No actions remaining this turn.' };
 
   const propIdx = player.properties.findIndex(p => p._ownedId === oid);
   if (propIdx === -1) return { ok: false, reason: 'Property not found.' };
@@ -779,7 +878,7 @@ function actionReleaseEquity(G, playerIdx, oid, amount) {
   const svc = projectedServiceability(G, player, amount);
   if (svc < 0)
     return { ok: false, reason: `Serviceability fails — projected $${fmt(svc)} after increase.` };
-  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
+  if (G.actionsUsedThisSlot >= maxActionsPerSlot(G)) return { ok: false, reason: 'No actions remaining this turn.' };
 
   prop.debt   += amount;
   player.cash += amount;
@@ -809,7 +908,7 @@ function actionDevelop(G, playerIdx, oid) {
   if (prop._developing) return { ok: false, reason: `${prop.city} development already in progress.` };
   if (prop._renovating) return { ok: false, reason: `${prop.city} is currently being renovated. Finish the renovation first.` };
   if (prop.market !== 'regional') return { ok: false, reason: 'Development only on regional properties.' };
-  if (G.actionsUsedThisSlot >= 2) return { ok: false, reason: 'No actions remaining this turn.' };
+  if (G.actionsUsedThisSlot >= maxActionsPerSlot(G)) return { ok: false, reason: 'No actions remaining this turn.' };
 
   const baseCost = Math.round(prop.currentValue * DEVELOP_COST_MULT);
   if (player.cash < baseCost)
@@ -860,8 +959,14 @@ function checkPendingDevelopments(G, playerIdx) {
       addLog(G, `${player.name}'s development on ${prop.city} succeeded: rent +$${fmt(rentBoost)}/yr, value +$${fmt(valueBoost)}.`);
       results.push({ prop: prop.city, success: true, rentBoost, valueBoost });
     } else {
-      addLog(G, `${player.name}'s development on ${prop.city} failed — cost already paid, no gain.`);
-      results.push({ prop: prop.city, success: false });
+      // v1.4.0: Failed development charges 50% cost overrun
+      const baseCost = Math.round(prop.currentValue * DEVELOP_COST_MULT);
+      const extraCost = Math.round(baseCost * 0.50);
+      const actualExtra = Math.min(extraCost, player.cash);
+      player.cash -= actualExtra;
+      prop.extraSpent = (prop.extraSpent || 0) + actualExtra;
+      addLog(G, `${player.name}'s development on ${prop.city} failed — 50% overrun cost $${fmt(actualExtra)}.`);
+      results.push({ prop: prop.city, success: false, overrunCost: actualExtra });
     }
     prop._developing      = false;
     prop._devYear         = null;
@@ -895,13 +1000,26 @@ function actionSetManager(G, playerIdx, oid, fee) {
 // Slot System
 // ============================================================
 
-function totalSlots(G)         { return G.players.length; }  // 1 turn per player per year
+function maxActionsPerSlot(G)  { return G.cfg ? G.cfg.actionsPerSlot : 2; }
+function totalSlots(G)         { return G.players.length * 2; }  // 2 turns per player per year
 function slotPlayer(G, slot)   { return (G.firstThisYear + slot) % G.players.length; }
 
 function endActionSlot(G) {
   G.actionsUsedThisSlot = 0;
   G.yearSlot++;
+
+  // v1.4.0: H2 cash flow fires at midpoint of action slots
+  const midSlot = Math.floor(totalSlots(G) / 2);
+  if (G.yearSlot === midSlot && !G._h2Fired) {
+    G._h2Fired = true;
+    processAllPlayerCashFlow(G, 'H2');
+    G.phase = 'midyear';
+    G.currentPlayerIdx = slotPlayer(G, G.yearSlot);
+    return;
+  }
+
   if (G.yearSlot >= totalSlots(G)) {
+    G._h2Fired = false; // reset for next year
     processYearEnd(G);
   } else {
     G.currentPlayerIdx = slotPlayer(G, G.yearSlot);
@@ -913,84 +1031,118 @@ function endActionSlot(G) {
 // Year Flow
 // ============================================================
 
-function processAllPlayerCashFlow(G) {
+// v1.4.0: half = 'H1' (year start — vacancy rolls, manager costs, full income/expense)
+//         half = 'H2' (mid-year — second income/expense pass, no new vacancy roll)
+function processAllPlayerCashFlow(G, half = 'H1') {
   G.players.forEach(p => {
     const vacancies = [];
-    p.properties.forEach(pr => {
-      if (pr._renovating) {
-        pr.vacantThisRound = false;
-        pr._missedRent     = pr.currentRent;
-        return;
+
+    if (half === 'H1') {
+      // H1: Roll vacancies, charge manager fees, expire rate effects
+      p.properties.forEach(pr => {
+        if (pr._renovating) {
+          pr.vacantThisRound = false;
+          pr._missedRent     = Math.round(pr.currentRent * 0.75); // v1.4.0: collect 1/4 rent during reno
+          return;
+        }
+        const fee             = pr.managerFee || 0;
+        const cheapFactor     = Math.max(0, (CHEAP_PRICE_THRESHOLD - pr.currentValue) / CHEAP_PRICE_THRESHOLD);
+        const vacancyReduction = (fee / MANAGER_FEE_MAX) * MANAGER_VACANCY_MAX_REDUCTION;
+        const baseVacancy     = Math.max(0, pr.vacancy - vacancyReduction);
+        const effectiveVacancy = Math.min(0.95, baseVacancy + CHEAP_VACANCY_BONUS * cheapFactor);
+        pr.vacantThisRound    = Math.random() < effectiveVacancy;
+        pr._missedRent        = pr.vacantThisRound ? pr.currentRent : 0;
+        if (pr.vacantThisRound) vacancies.push(pr.city);
+      });
+
+      // Manager costs: charged once per year at H1 only (0G verification)
+      let managerCosts = 0;
+      p.properties.forEach(pr => {
+        const cost = pr.managerFee || 0;
+        if (cost > 0) managerCosts += cost;
+      });
+      if (managerCosts > 0) {
+        p.cash -= managerCosts;
+        addLog(G, `${p.name}: Property manager fees $${fmt(managerCosts)}.`);
       }
-      const fee             = pr.managerFee || 0;
-      const cheapFactor     = Math.max(0, (CHEAP_PRICE_THRESHOLD - pr.currentValue) / CHEAP_PRICE_THRESHOLD);
-      const vacancyReduction = (fee / MANAGER_FEE_MAX) * MANAGER_VACANCY_MAX_REDUCTION;
-      const baseVacancy     = Math.max(0, pr.vacancy - vacancyReduction);
-      const effectiveVacancy = Math.min(0.95, baseVacancy + CHEAP_VACANCY_BONUS * cheapFactor);
-      pr.vacantThisRound    = Math.random() < effectiveVacancy;
-      pr._missedRent        = pr.vacantThisRound ? pr.currentRent : 0;
-      if (pr.vacantThisRound) vacancies.push(pr.city);
-    });
 
-    const livingExpenses = Math.round(p.salary * LIVING_EXPENSE_RATE);
-    const netSavings     = p.salary - livingExpenses;
-    let rentCollected    = p.properties.reduce((s, pr) => s + (pr.vacantThisRound || pr._renovating ? 0 : pr.currentRent), 0);
+      if (p.rentHalvedNextRound) {
+        p._rentHalvedThisYear = true;
+        p.rentHalvedNextRound = false;
+        addLog(G, `${p.name}: Rent halved this year.`);
+      }
 
-    let managerCosts = 0;
-    p.properties.forEach(pr => {
-      const cost = pr.managerFee || 0;
-      if (cost > 0) managerCosts += cost;
-    });
-    if (managerCosts > 0) {
-      p.cash -= managerCosts;
-      addLog(G, `${p.name}: Property manager fees $${fmt(managerCosts)}.`);
-    }
+      // Expire temporary rate effects (influence card rate spike)
+      if (p._rateSpikeYearsLeft > 0) {
+        p._rateSpikeYearsLeft--;
+        if (p._rateSpikeYearsLeft === 0) {
+          p.interestRate = Math.max(0, p.interestRate - 0.005);
+          addLog(G, `${p.name}: Rate spike expired.`);
+        }
+      }
 
-    if (p.rentHalvedNextRound) {
-      rentCollected = Math.round(rentCollected / 2);
-      p.rentHalvedNextRound = false;
-      addLog(G, `${p.name}: Rent halved this year.`);
-    }
-
-    // Expire temporary rate effects (influence card rate spike)
-    if (p._rateSpikeYearsLeft > 0) {
-      p._rateSpikeYearsLeft--;
-      if (p._rateSpikeYearsLeft === 0) {
-        p.interestRate = Math.max(0, p.interestRate - 0.005);
-        addLog(G, `${p.name}: Rate spike expired.`);
+      // Expire personal rate discount (chance card)
+      if (p.personalRateDiscountYears > 0) {
+        p.personalRateDiscountYears--;
+        if (p.personalRateDiscountYears === 0 && p.personalRateDiscount > 0) {
+          p.interestRate = Math.max(0, p.interestRate + p.personalRateDiscount);
+          p.personalRateDiscount = 0;
+          addLog(G, `${p.name}: Rate discount expired.`);
+        }
       }
     }
 
-    // Expire personal rate discount (chance card)
-    if (p.personalRateDiscountYears > 0) {
-      p.personalRateDiscountYears--;
-      if (p.personalRateDiscountYears === 0 && p.personalRateDiscount > 0) {
-        p.interestRate = Math.max(0, p.interestRate + p.personalRateDiscount);
-        p.personalRateDiscount = 0;
-        addLog(G, `${p.name}: Rate discount expired.`);
-      }
-    }
-
+    // Both H1 and H2: collect half-year income and pay half-year expenses
     recalcPlayer(G, p);
-    const interestPaid = Math.round(p.annualRepayments);
-    p.cash += netSavings + rentCollected - interestPaid;
+
+    const halfLivingExpenses = Math.round((p.salary * LIVING_EXPENSE_RATE) / 2);
+    const halfNetSavings     = Math.round(p.salary / 2) - halfLivingExpenses;
+    let halfRentCollected    = p.properties.reduce((s, pr) => {
+      if (pr.vacantThisRound) return s;
+      if (pr._renovating) return s + Math.round(pr.currentRent / 4 / 2); // 1/4 of annual, halved
+      return s + Math.round(pr.currentRent / 2);
+    }, 0);
+
+    if (p._rentHalvedThisYear) {
+      halfRentCollected = Math.round(halfRentCollected / 2);
+    }
+
+    const halfInterestPaid = Math.round(p.annualRepayments / 2);
+    p.cash += halfNetSavings + halfRentCollected - halfInterestPaid;
     recalcPlayer(G, p);
 
-    p._yearRecap = {
-      netSavings, rentCollected, interestPaid, managerCosts, vacancies,
-      portfolioGrowthValue: p.properties.reduce((s, pr) => s + (pr._valueGain || 0), 0),
-      totalMissedRent:      p.properties.reduce((s, pr) => s + (pr._missedRent || 0), 0)
-    };
+    if (half === 'H1') {
+      // Store recap for year-start display (will be updated by H2)
+      p._yearRecap = {
+        netSavings: halfNetSavings, rentCollected: halfRentCollected,
+        interestPaid: halfInterestPaid, managerCosts: 0, vacancies,
+        portfolioGrowthValue: p.properties.reduce((s, pr) => s + (pr._valueGain || 0), 0),
+        totalMissedRent:      p.properties.reduce((s, pr) => s + (pr._missedRent || 0), 0)
+      };
+      // Store manager costs in recap
+      let mc = 0; p.properties.forEach(pr => { mc += (pr.managerFee || 0); });
+      p._yearRecap.managerCosts = mc;
 
-    if (vacancies.length) addLog(G, `${p.name}: Vacant — ${vacancies.join(', ')}`);
-    if (p.blocked) addLog(G, `⚠️ ${p.name} BLOCKED — serviceability negative.`);
+      if (vacancies.length) addLog(G, `${p.name}: Vacant — ${vacancies.join(', ')}`);
+      if (p.blocked) addLog(G, `⚠️ ${p.name} BLOCKED — serviceability negative.`);
+    } else {
+      // H2: accumulate into recap
+      if (p._yearRecap) {
+        p._yearRecap.netSavings    += halfNetSavings;
+        p._yearRecap.rentCollected += halfRentCollected;
+        p._yearRecap.interestPaid  += halfInterestPaid;
+      }
+      // Clear rent halved flag at end of year
+      p._rentHalvedThisYear = false;
+    }
   });
 }
 
 function processYearEnd(G) {
   G.year++;
 
-  if (G.year > MAX_YEARS) {
+  const maxYears = G.cfg ? G.cfg.maxYears : MAX_YEARS;
+  if (G.year > maxYears) {
     endGame(G);
     return;
   }
@@ -1041,9 +1193,10 @@ function processYearEnd(G) {
 }
 
 function continueToYearStart(G) {
-  processAllPlayerCashFlow(G);
+  processAllPlayerCashFlow(G, 'H1');
 
   G.yearSlot = 0;
+  G._h2Fired = false;
   G.currentPlayerIdx = G.firstThisYear;
 
   addLog(G, `--- Year ${G.year} begins --- (${G.players[G.firstThisYear].name} goes first)`);
@@ -1160,6 +1313,51 @@ function applyEconomicEventEffect(G, event) {
       G.activeRestrictions.metroPriceInflation = event.value;
       addLog(G, `Metro purchase prices inflated by ${(event.value * 100).toFixed(0)}% this year.`);
       break;
+
+    // v1.4.0: Ported from offline version
+    case 'upgradeDelay':
+      G.players.forEach(p => {
+        p.properties.forEach(pr => {
+          if (pr._renovating && pr._renoCompleteYear) {
+            pr._renoCompleteYear++;
+            addLog(G, `${p.name}: ${pr.city} renovation delayed +1 year (now Year ${pr._renoCompleteYear}).`);
+          }
+          if (pr._developing && pr._devCompleteYear) {
+            pr._devCompleteYear++;
+            addLog(G, `${p.name}: ${pr.city} development delayed +1 year (now Year ${pr._devCompleteYear}).`);
+          }
+        });
+      });
+      break;
+    case 'luxuryValueDrop': {
+      let affected = 0;
+      G.players.forEach(p => {
+        p.properties.forEach(pr => {
+          if (pr.currentValue > 800000) {
+            pr.currentValue = Math.round(pr.currentValue * (1 - event.value));
+            affected++;
+          }
+        });
+        recalcPlayer(G, p);
+      });
+      if (affected === 0) addLog(G, 'Luxury Market Slump: no properties above $800k — no effect.');
+      break;
+    }
+    case 'tenantDamage': {
+      let affected = 0;
+      G.players.forEach(p => {
+        const cheap = p.properties.filter(pr => pr.currentValue < 400000);
+        if (cheap.length) {
+          const cheapest = cheap.reduce((m, pr) => pr.currentValue < m.currentValue ? pr : m, cheap[0]);
+          cheapest.currentValue = Math.round(cheapest.currentValue * (1 - event.value));
+          addLog(G, `${p.name}: ${cheapest.city} damaged by tenants (-${(event.value * 100).toFixed(0)}% value).`);
+          affected++;
+        }
+        recalcPlayer(G, p);
+      });
+      if (affected === 0) addLog(G, 'Tenant Vandalism: no properties under $400k — no effect.');
+      break;
+    }
   }
 }
 
@@ -1192,7 +1390,7 @@ function applyMarketChange(G, policy) {
 function expireMarketChange(G, policy) {
   const r = G.activeRestrictions;
   switch (policy.effect) {
-    case 'lvrCap':         r.depositRate = BASE_DEPOSIT_RATE; break;
+    case 'lvrCap':         r.depositRate = (G.cfg ? G.cfg.baseDepositRate : BASE_DEPOSIT_RATE); break;
     case 'regionalFreeze': r.regionalFreeze = false; break;
     case 'bufferIncrease': r.incomeMultiplier = BASE_INCOME_MULT; G.players.forEach(p => recalcPlayer(G, p)); break;
     case 'investorCap':    r.investorCap = false; break;
@@ -1203,7 +1401,7 @@ function expireMarketChange(G, policy) {
 }
 
 function normaliseRestrictions(G) {
-  G.activeRestrictions = freshRestrictions();
+  G.activeRestrictions = freshRestrictions(G.cfg);
   G.players.forEach(p => recalcPlayer(G, p));
 }
 
@@ -1211,9 +1409,28 @@ function normaliseRestrictions(G) {
 // Auction System (unchanged logic)
 // ============================================================
 
+function pickAuctionProperty(G) {
+  // v1.4.0: Year-weighted tier selection for urgent sales
+  const year = G.year;
+  let weights;
+  if (year <= 3)      weights = { standard: 1.0, premium: 0, rare: 0, legendary: 0 };
+  else if (year <= 6) weights = { standard: 0.60, premium: 0.30, rare: 0.10, legendary: 0 };
+  else                weights = { standard: 0.40, premium: 0.30, rare: 0.20, legendary: 0.10 };
+
+  const roll = Math.random();
+  let targetRarity;
+  if (roll < weights.legendary)                                          targetRarity = 'legendary';
+  else if (roll < weights.legendary + weights.rare)                      targetRarity = 'rare';
+  else if (roll < weights.legendary + weights.rare + weights.premium)    targetRarity = 'premium';
+  else                                                                    targetRarity = 'standard';
+
+  const pool = PROPERTIES.filter(p => p.rarity === targetRarity);
+  if (pool.length === 0) return PROPERTIES[Math.floor(Math.random() * PROPERTIES.length)];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function startAuction(G, eventCard) {
-  const pool = PROPERTIES.filter(p => p.market !== undefined);
-  const base = pool[Math.floor(Math.random() * pool.length)];
+  const base = pickAuctionProperty(G);
   const listing = makeMarketListing(base, G.year);
   const discountedPrice = Math.round(listing.price * (1 - eventCard.discount));
 
@@ -1316,13 +1533,21 @@ function resolveAuction(G) {
 // Win / End Game
 // ============================================================
 
+// v1.4.0: Dismiss midyear summary → continue to next action slot
+function dismissMidyear(G) {
+  if (G.phase !== 'midyear') return;
+  G.currentPlayerIdx = slotPlayer(G, G.yearSlot);
+  G.phase = 'handoff';
+}
+
 function checkWin(G) {
+  const target = G.cfg ? G.cfg.winTarget : WIN_TARGET;
   for (const p of G.players) {
     recalcPlayer(G, p);
-    if (p.netWorth >= WIN_TARGET) {
+    if (p.netWorth >= target) {
       G.phase  = 'gameover';
       G.winner = p;
-      addLog(G, `${p.name} reached $${fmt(WIN_TARGET)} net worth — WINS!`);
+      addLog(G, `${p.name} reached $${fmt(target)} net worth — WINS!`);
       return true;
     }
   }
@@ -1333,7 +1558,8 @@ function endGame(G) {
   G.phase = 'gameover';
   const sorted = [...G.players].sort((a, b) => b.netWorth - a.netWorth);
   G.winner = sorted[0];
-  addLog(G, `GAME OVER — ${MAX_YEARS} years complete. Winner: ${G.winner.name} with $${fmt(G.winner.netWorth)} net worth!`);
+  const years = G.cfg ? G.cfg.maxYears : MAX_YEARS;
+  addLog(G, `GAME OVER — ${years} years complete. Winner: ${G.winner.name} with $${fmt(G.winner.netWorth)} net worth!`);
 }
 
 // ============================================================
@@ -1392,12 +1618,17 @@ module.exports = {
   actionReleaseEquity,
   actionDevelop,
   actionSetManager,
+  // Midyear
+  dismissMidyear,
   // Auction
   placeBid,
   passAuction,
   // State views
   getPublicState,
   getPrivateState,
+  // Config
+  DEFAULT_CONFIG,
+  maxActionsPerSlot,
   // Utils (needed by server)
   recalcPlayer,
   checkWin,

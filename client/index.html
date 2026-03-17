@@ -18,7 +18,7 @@
     <div id="title-overlay">
       <button class="btn-primary" id="btn-title-play">▶ Play Game</button>
     </div>
-    <div id="version-badge">v1.3.0</div>
+    <div id="version-badge">v1.4.0</div>
 
     <!-- How-to-play panel (shown after pressing Play) -->
     <div id="howtoplay-panel" class="hidden">
@@ -60,6 +60,87 @@
           <option value="3">3 Players</option>
           <option value="4">4 Players</option>
         </select>
+
+        <!-- v1.4.0: Standard / Custom toggle -->
+        <div class="game-mode-toggle">
+          <button class="mode-btn active" id="mode-standard">Standard</button>
+          <button class="mode-btn" id="mode-custom">Custom</button>
+        </div>
+
+        <!-- Custom settings panel (hidden by default) -->
+        <div id="custom-settings" class="custom-settings hidden">
+          <div class="settings-section">
+            <div class="settings-section-title">Economy</div>
+            <label>Starting Cash <span class="setting-val" id="val-cash">$80,000</span>
+              <input type="range" id="cfg-cash" min="20000" max="200000" step="10000" value="80000">
+            </label>
+            <label>Starting Salary <span class="setting-val" id="val-salary">$95,000</span>
+              <input type="range" id="cfg-salary" min="40000" max="200000" step="5000" value="95000">
+            </label>
+            <label>Win Goal <span class="setting-val" id="val-win">$1,000,000</span>
+              <input type="range" id="cfg-win" min="500000" max="5000000" step="100000" value="1000000">
+            </label>
+            <label>Game Length <span class="setting-val" id="val-years">10 yrs</span>
+              <input type="range" id="cfg-years" min="5" max="20" step="1" value="10">
+            </label>
+            <label>Actions Per Turn <span class="setting-val" id="val-actions">2</span>
+              <input type="range" id="cfg-actions" min="1" max="3" step="1" value="2">
+            </label>
+            <label>Base Interest Rate <span class="setting-val" id="val-rate">6.5%</span>
+              <input type="range" id="cfg-rate" min="3" max="12" step="0.5" value="6.5">
+            </label>
+            <label>Deposit Rate <span class="setting-val" id="val-deposit">20%</span>
+              <input type="range" id="cfg-deposit" min="10" max="30" step="5" value="20">
+            </label>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">Market</div>
+            <label>Market Size <span class="setting-val" id="val-market">9</span>
+              <input type="range" id="cfg-market" min="6" max="15" step="1" value="9">
+            </label>
+            <label>Max Properties
+              <select id="cfg-maxprops">
+                <option value="999" selected>Unlimited</option>
+                <option value="3">3</option>
+                <option value="5">5</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <label>Rarity Guarantees
+              <select id="cfg-rarity"><option value="1" selected>On</option><option value="0">Off</option></select>
+            </label>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">Balance</div>
+            <label>Renovation Power
+              <select id="cfg-reno">
+                <option value="balanced" selected>Balanced</option>
+                <option value="classic">Classic (Pre-1.4.0)</option>
+                <option value="weak">Weak</option>
+              </select>
+            </label>
+            <div class="reno-desc" id="reno-desc">v1.4.0 standard. Renovations are good, not dominant.</div>
+            <label>Equity Deposit Leverage
+              <select id="cfg-equity"><option value="1" selected>On</option><option value="0">Off</option></select>
+            </label>
+            <label>Reno Cooldown (1yr)
+              <select id="cfg-cooldown"><option value="1" selected>On</option><option value="0">Off</option></select>
+            </label>
+            <label>Extended Event Deck
+              <select id="cfg-events"><option value="1" selected>On</option><option value="0">Off</option></select>
+            </label>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">Online Features</div>
+            <label>Wheel Events
+              <select id="cfg-wheel"><option value="1" selected>On</option><option value="0">Off</option></select>
+            </label>
+            <label>Influence Cards (PvP)
+              <select id="cfg-influence"><option value="1" selected>On</option><option value="0">Off</option></select>
+            </label>
+          </div>
+        </div>
+
         <button class="btn-primary" id="btn-create-room">Create Room →</button>
       </div>
 
@@ -256,6 +337,21 @@
         <div style="text-align:center;margin-top:8px;">
           <button class="btn-primary" id="btn-dismiss-ys">Continue →</button>
           <p id="ys-waiting" style="color:var(--text3);font-size:.78rem;margin-top:8px;"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mid-Year Summary (v1.4.0) -->
+    <div id="overlay-midyear" class="overlay hidden">
+      <div class="overlay-card" style="max-width:520px;">
+        <div class="yearstart-header">
+          <h2 id="my-title">Mid-Year Summary</h2>
+          <span class="yearstart-subtitle" id="my-subtitle">H2 income received</span>
+        </div>
+        <div class="recap-grid" id="my-recap-grid"></div>
+        <div style="text-align:center;margin-top:8px;">
+          <button class="btn-primary" id="btn-dismiss-midyear">Continue →</button>
+          <p id="my-waiting" style="color:var(--text3);font-size:.78rem;margin-top:8px;"></p>
         </div>
       </div>
     </div>

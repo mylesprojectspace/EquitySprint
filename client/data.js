@@ -339,9 +339,9 @@ const PROPERTIES = [
     id: 33, market: 'metro', city: 'Bondi Penthouse',
     flavour: 'The crown jewel of Australian real estate — views, prestige, permanence',
     propType: 'penthouse',
-    price: 3500000,
+    price: 2500000,
     yieldMin: 0.055, yieldMax: 0.080,
-    growthMin: 0.080, growthMax: 0.200,
+    growthMin: 0.055, growthMax: 0.170,
     renoUpside: 0.15, risk: 'low', vacancy: 0.01,
     rarity: 'legendary', renovated: false, developed: false
   },
@@ -349,9 +349,9 @@ const PROPERTIES = [
     id: 34, market: 'metro', city: 'Toorak Manor',
     flavour: "Melbourne's most exclusive address — old money, new returns",
     propType: 'manor',
-    price: 4200000,
+    price: 3000000,
     yieldMin: 0.050, yieldMax: 0.075,
-    growthMin: 0.075, growthMax: 0.180,
+    growthMin: 0.060, growthMax: 0.155,
     renoUpside: 0.12, risk: 'low', vacancy: 0.01,
     rarity: 'legendary', renovated: false, developed: false
   },
@@ -455,6 +455,31 @@ const WHEEL_ECONOMIC_EVENTS = [
     id: 'we17', title: 'Mortgagee Sale',
     text: 'A bank repossession listed 20% below market value. Competitive bidding only.',
     effect: 'urgentSale', discount: 0.20, rarity: 'rare'
+  },
+  {
+    id: 'we18', title: 'National Housing Crisis',
+    text: 'Nationwide downturn. All property values drop 5%.',
+    effect: 'allValueDrop', value: 0.05
+  },
+  {
+    id: 'we19', title: 'Strata Fee Surge',
+    text: 'Body corporates hike levies. All players pay $3,000.',
+    effect: 'allFlatCost', value: 3000
+  },
+  {
+    id: 'we20', title: 'Construction Delays',
+    text: 'Supply chain crisis. All active renovations and developments delayed +1 year.',
+    effect: 'upgradeDelay'
+  },
+  {
+    id: 'we21', title: 'Luxury Market Slump',
+    text: 'High-end market softens. Properties valued above $800k lose 10% value.',
+    effect: 'luxuryValueDrop', value: 0.10
+  },
+  {
+    id: 'we22', title: 'Tenant Vandalism',
+    text: "Problem tenants strike. Each player's cheapest property under $400k loses 8% value.",
+    effect: 'tenantDamage', value: 0.08
   },
 ];
 

@@ -213,6 +213,49 @@ select:focus { border-color: var(--blue); }
 }
 
 /* ═══════════════════════════════════════════════
+   v1.4.0 GAME MODE TOGGLE & CUSTOM SETTINGS
+═══════════════════════════════════════════════ */
+.game-mode-toggle {
+  display: flex; gap: 4px; background: var(--cream); border-radius: var(--radius-sm);
+  padding: 4px; margin: 10px 0;
+}
+.mode-btn {
+  flex: 1; padding: 7px 0; text-align: center; font-weight: 700; font-size: .82rem;
+  border-radius: 8px; background: transparent; color: var(--text2); transition: all .15s;
+}
+.mode-btn.active { background: var(--blue); color: #fff; box-shadow: 0 2px 8px rgba(74,144,226,.25); }
+
+.custom-settings {
+  max-height: 340px; overflow-y: auto; padding: 10px 0; border-top: 1px solid var(--border);
+  transition: max-height .3s ease;
+}
+.custom-settings.hidden { display: none; }
+.settings-section { margin-bottom: 12px; }
+.settings-section-title {
+  font-weight: 800; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--blue); margin-bottom: 6px;
+}
+.custom-settings label {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: .78rem; font-weight: 600; color: var(--text); margin-bottom: 6px;
+}
+.custom-settings input[type="range"] {
+  width: 140px; flex-shrink: 0; padding: 0; border: none;
+}
+.custom-settings select { width: 120px; flex-shrink: 0; padding: 4px 8px; font-size: .76rem; }
+.setting-val { font-weight: 800; color: var(--blue); margin-left: auto; min-width: 60px; text-align: right; }
+.reno-desc {
+  font-size: .72rem; color: var(--text2); font-style: italic; margin: -2px 0 8px;
+  padding-left: 2px;
+}
+
+.custom-badge {
+  display: inline-block; background: var(--gold); color: #fff; font-size: .65rem;
+  font-weight: 800; padding: 2px 8px; border-radius: 6px; margin-left: 8px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+
+/* ═══════════════════════════════════════════════
    WAITING SCREEN
 ═══════════════════════════════════════════════ */
 #screen-waiting {
@@ -1117,7 +1160,10 @@ select:focus { border-color: var(--blue); }
 .bar-name  { font-size: .62rem; font-weight: 700; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-track { background: var(--border); border-radius: 4px; height: 9px; overflow: hidden; }
 .bar-fill  { height: 100%; border-radius: 4px; transition: width .6s ease; }
-.bar-val   { font-size: .6rem; font-weight: 800; color: var(--text); text-align: right; }
+.bar-track { position: relative; }
+.bar-fill.equity-bar { position: absolute; top: 0; left: 0; }
+.bar-val   { font-size: .6rem; font-weight: 800; color: var(--text); text-align: right; line-height: 1.2; }
+.bar-equity { font-size: .52rem; color: var(--mint); font-weight: 700; }
 
 /* ═══════════════════════════════════════════════
    ANIMATED CLOUDS
